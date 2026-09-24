@@ -22,10 +22,16 @@ If these documents conflict, stop and ask. Never resolve a conflict silently.
 
 - Phases: `/speckit-constitution` → `/speckit-specify` → `/speckit-plan` → `/speckit-tasks` → `/speckit-implement`.
 - **Implement one task at a time.** Do only the requested task, run the tests, show the result,
-  mark the task `[x]` in `tasks.md`, commit, and **stop**. Do not start the next task unasked.
+  mark the task `[x]` in `tasks.md` and **stop**. Do not start the next task unasked.
 - Priorities: P0 (MVP) → P1 → P2. Never start P1 work while any P0 task is open.
 - Behavior changes go to the spec first. Show the spec diff before touching code.
 - Do not refactor, rename or "improve" code outside the current task.
+
+## Git
+
+- The agent never runs `git commit`, `git push` or `git reset`.
+- Leave all changes uncommitted for human review.
+- When a task is done, propose a commit message in Conventional Commits format, in English.
 
 ## Stack and layout
 
@@ -73,7 +79,10 @@ pytest -q                         # test suite (must pass before marking a task 
 ## Testing
 
 - Pure functions get pytest tests written first: schema validation, config/`sessions.yaml` parsing,
-  glossary merge and filtering, event merge by `(run_id, track, segment_id)` + `revision`, SRT/VTT export.
+  glossary merge and filtering, SRT/VTT export.
+- Event merge by `(run_id, track, segment_id)` + `revision` lives in the audience page JS in P0 and is
+  verified with `scripts/replay_events.py`. It moves to Python with a pytest test in P1, when the
+  gateway uses it.
 - Gemini and ffmpeg integration is verified with the clips in `samples/audio/` using the
   "Done when" command of each task. Do not mock the Gemini API to fake a passing task.
 
