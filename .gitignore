@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Live Subs: local-only audio (not redistributable) and T0 raw output
+samples/local/
+scripts/t0/out/
