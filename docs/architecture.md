@@ -59,10 +59,10 @@ El **Worker** procesa audio y produce eventos. **Redis** desacopla el procesamie
 | # | Decisión | Motivo |
 | ----- | ----- | ----- |
 | D1 | Audio por streaming continuo (Live API). Nunca fragmentos por REST | Los fragmentos cortan palabras, pierden contexto y suman latencia por petición |
-| D2 | Pipeline A: `transcribe-live` + traducción de texto con Gemini Flash. La alternativa B (`live-translate`) se evalúa en la prueba técnica | A admite glosario en ambos pasos y abarata sumar idiomas |
+| D2 | Pipeline A decidido: `transcribe-live` + traducción de texto con Gemini Flash. La alternativa B (`live-translate`) se descarta: no da parciales ni admite glosario | A admite glosario en ambos pasos y abarata sumar idiomas |
 | D3 | `SubtitleEvent` es el contrato único entre todos los componentes | Permite cambiar piezas sin romper el resto |
 | D4 | Los parciales solo se muestran en el original; se traducen únicamente las frases finales | Traducir parciales es caro, ruidoso y empeora la lectura |
-| D5 | <p>Un evento por idioma y un canal por sesión y pista (</p><p>_track_</p><p>)</p> | Cada cliente recibe solo lo que eligió; sumar idiomas no cambia el contrato |
+| D5 | Un evento por idioma y un canal por sesión y pista (_track_) | Cada cliente recibe solo lo que eligió; sumar idiomas no cambia el contrato |
 | D6 | Un solo código Python, una sola imagen, dos procesos (worker y gateway) | Menos piezas que mantener; esquema compartido |
 | D7 | Configuración en lugar de código: `sessions.yaml`, glosarios y `.env`  | Operar el evento sin tocar código |
 | D8 | Parámetros de audio y segmentación configurables; se ajustan midiendo latencia de punta a punta | No casarse con valores antes de medir |
@@ -390,17 +390,16 @@ live-subs/
 ---
 
 ## 14. Decisiones pendientes
-1. **Prueba técnica (primera hora):** confirmar pipeline A frente a B con el mismo clip, midiendo calidad y latencia.
-2. **Modelos y cuotas:** confirmar el ID exacto de `TRANSLATE_MODEL` , el acceso a `gemini-3.5-transcribe-live`  y la cuota de sesiones concurrentes del proyecto.
-3. **Marcas de tiempo:** verificar si la Live API entrega tiempos por enunciado (§8).
-4. **Corte forzado:** verificar que `audio_stream_end`  a mitad de una frase fuerza el final y que la sesión sigue aceptando audio. Si no funciona, el corte se hace en el cliente con el último parcial.
-5. **Costos:** completar la fórmula de §10 con los precios vigentes.
-6. **Capacidad por worker:** medir cuántos escenarios soporta un proceso antes de degradar la latencia.
+1. **Cuota:** confirmar la cuota de sesiones concurrentes del proyecto.
+2. **Marcas de tiempo:** verificar si la Live API entrega tiempos por enunciado (§8).
+3. **Corte forzado (P1):** verificar que `audio_stream_end`  a mitad de una frase fuerza el final y que la sesión sigue aceptando audio. Si no funciona, el corte se hace en el cliente con el último parcial.
+4. **Costos:** completar la fórmula de §10 con los precios vigentes.
+5. **Capacidad por worker:** medir cuántos escenarios soporta un proceso antes de degradar la latencia.
 ---
 
 ## 15. Criterios de validación
 ### P0 — MVP
-- [ ] Dos escenarios simultáneos desde archivos de`samples/audio/`  (uno en inglés, uno en español).
+- [ ] Dos escenarios simultáneos desde archivos de `samples/audio/`  (uno en inglés, uno en español).
 - [ ] Original parcial y final en pantalla, sin parciales obsoletos.
 - [ ] Traducción EN→ES en la sala en inglés y ES→EN en la sala en español, vinculadas a su frase original.
 - [ ] La vista de audiencia permite elegir sesión y pista.
