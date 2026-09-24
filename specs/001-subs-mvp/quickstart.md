@@ -80,13 +80,14 @@ el worker.
 
 ## V6. Eventos repetidos y desordenados en la vista (RF-019 a RF-021)
 
-Con la vista abierta en una sesión de prueba, ejecutar el script de repetición:
+Con el worker detenido y la vista abierta en `sala1` → `original`, ejecutar el script de repetición:
 
 ```bash
-docker compose exec worker python scripts/replay_events.py --session demo
+docker compose stop worker
+docker compose run --rm worker python scripts/replay_events.py --session sala1
 ```
 
-El script publica en `subs:demo:*` una secuencia fija con parciales duplicados, revisiones
+El script publica en `subs:sala1:original` una secuencia fija con parciales duplicados, revisiones
 desordenadas, un final antes de su último parcial y un cambio de `run_id`.
 
 **Esperado**:
