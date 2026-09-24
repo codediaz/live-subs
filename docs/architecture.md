@@ -5,7 +5,7 @@
 | ----- | ----- |
 | Documento | Software Design Description (`docs/architecture.md`) |
 | Sistema | Live Subs |
-| Versión | 0.1 — diseño del MVP para la Nerdearla Vibeathon 2026 |
+| Versión | 0.4 — diseño del MVP para la Nerdearla Vibeathon 2026, alineado con `specs/001-subs-mvp/` |
 | Fecha | 24 de septiembre de 2026 |
 | Estado | Aprobado para implementación. Pendientes explícitos en §14 |
 | Licencia | Apache 2.0 |
@@ -88,6 +88,8 @@ El **Worker** procesa audio y produce eventos. **Redis** desacopla el procesamie
 | Transcriptor | `worker/transcriber.py`  | Mantener la sesión Live, convertir resultados en eventos originales y forzar cortes largos | Audio, vocabulario | Eventos `original` parciales y finales |
 | Traductor | `worker/translator.py`  | Traducir cada frase final a cada idioma destino con glosario y contexto | Frase final | Eventos `translation`  |
 | Publicador | `worker/publisher.py`  | Publicar eventos, guardar historial y reportar estado | Eventos | Redis |
+| Colas | `common/queues.py`  | Cola acotada que, al llenarse, descarta el elemento más antiguo y cuenta el descarte. La usan la ingesta, el traductor y el gateway | Elementos | Elementos + descartes |
+| Logs | `common/logs.py`  | Formato JSON con `session_id`; en `INFO`, sin audio ni texto | Registros | Salida estándar |
 | Redis | servicio | Pub/sub, historial por pista y estado por sesión | Eventos | Eventos, historial, estado |
 | Gateway | `gateway/main.py`  | WebSocket, API de sesiones, historial, exportación, estado; servir páginas | Redis, `sessions.yaml`  | WebSocket y HTTP |
 | Clientes | `gateway/static/`  | Audiencia, overlay y panel | Gateway | Vistas |
@@ -112,15 +114,16 @@ El **Worker** procesa audio y produce eventos. **Redis** desacopla el procesamie
 2. El prompt incluye: la frase, el título de la charla, las últimas `TRANSLATION_CONTEXT_SEGMENTS`  frases finales y **solo** los términos del glosario presentes en la frase.
 3. Cada traducción se publica como evento `translation`  con `is_final=true` , el mismo `segment_id`  del original y el `track`  del idioma destino.
 4. Hay una cola por pista de traducción: las pistas avanzan en paralelo y, dentro de cada una, las frases se traducen en orden. La traducción nunca bloquea la publicación del original.
-5. Si la cola de una pista acumula más de 3 frases pendientes, las pendientes se unen en una sola petición para recuperar el retraso.
+5. La cola de cada pista es acotada (`TRANSLATION_QUEUE_MAX`). Si se llena, se descarta la frase pendiente más antigua y se registra el descarte. **(P1)** Unir las frases pendientes en una sola petición para recuperar el retraso.
 ### 6.4 Distribución y conexión de clientes
 1. El Gateway mantiene **una sola suscripción a Redis por canal**, compartida por todos los clientes que piden esa pista, y reparte cada evento en memoria. El costo en Redis no crece con la cantidad de espectadores.
 2. Un cliente nuevo abre el WebSocket y acumula lo que llega; luego pide el historial reciente por HTTP y fusiona ambos por la clave `(run_id, track, segment_id)` , conservando la `revision`  mayor. Así no hay huecos ni duplicados.
 3. En pantalla, un parcial reemplaza al anterior del mismo `segment_id` ; el final lo consolida.
 4. Si llega un evento con un `run_id`  distinto al actual, el cliente limpia la pantalla y empieza la nueva ejecución.
 ### 6.5 Fin de sesión y exportación
-1. Cuando la fuente termina, el Worker publica el estado `stopped`  y cierra la sesión Live.
-2. La exportación SRT, VTT o TXT se genera en el Gateway a partir del historial de finales de la pista pedida, usando `start_ms`  y `end_ms` .
+1. Cuando la fuente termina y el escenario no tiene loop, el Worker publica el estado `stopped`  y cierra la sesión Live.
+2. Si la fuente es un archivo con `loop: true`, cuando el clip termina el Worker cierra la sesión Live, genera un `run_id` nuevo y vuelve a empezar con un `ffmpeg` y una sesión Live nuevos. Cada vuelta es una ejecución distinta; con clips de menos de 10 minutos, la sesión Live nunca llega a su límite. Los clientes limpian la pantalla al ver el `run_id` nuevo (§6.4.4).
+3. La exportación SRT, VTT o TXT se genera en el Gateway a partir del historial de finales de la pista pedida, usando `start_ms`  y `end_ms` .
 ---
 
 ## 7. Contratos
@@ -202,7 +205,8 @@ sessions:
     title: "Título de la charla en curso"     # contexto para la traducción
     source:
       type: file                               # file | stream | microphone
-      uri: samples/audio/charla_en.wav
+      uri: samples/audio/charla_en.ogg
+      loop: true                               # opcional, solo para file: repite el clip
     source_language: en                        # en | es | auto (P2)
     target_languages: [es, pt]
     glossary: samples/glossaries/sala1.yaml    # opcional; se suma al global
@@ -216,7 +220,7 @@ sessions:
     source_language: es
     target_languages: [en]
 ```
-Reglas: `id` único y sin espacios; `uri` obligatorio para `file` y `stream`; los valores de `defaults` aplican cuando el escenario no los define. Un cambio en el archivo se aplica reiniciando el worker (`docker compose restart worker`); la recarga en caliente es P2.
+Reglas: `id` único y sin espacios; `uri` obligatorio para `file` y `stream`; `loop` (por defecto `false`) solo se admite con `type: file` (§6.5); los valores de `defaults` aplican cuando el escenario no los define. Si el archivo no es válido, el worker no arranca e indica el escenario y el campo con error. Un cambio en el archivo se aplica reiniciando el worker (`docker compose restart worker`); la recarga en caliente es P2.
 
 ### 7.4 Glosario
 ```yaml
@@ -264,15 +268,26 @@ Mensajes del WebSocket: `{"type": "subtitle", "data": SubtitleEvent}` y `{"type"
 | `GEMINI_API_KEY`  | — | Credencial; solo la necesita el worker |
 | `REDIS_URL`  | `redis://redis:6379/0`  | Conexión a Redis |
 | `TRANSCRIBE_MODEL`  | `gemini-3.5-transcribe-live`  | Modelo de transcripción |
-| `TRANSLATE_MODEL`  | Gemini Flash vigente (ID a confirmar en la prueba técnica) | Modelo de traducción |
-| `AUDIO_CHUNK_MS`  | `100`  | Tamaño de bloque de audio |
-| `MAX_SEGMENT_MS`  | `6000`  | Duración máxima de una frase antes del corte forzado |
+| `TRANSLATE_MODEL`  | `gemini-3.8-flash` (la prueba técnica lo compara con `gemini-3.5-flash-lite`) | Modelo de traducción |
+| `TRANSLATE_THINKING_LEVEL`  | `LOW`  | Razonamiento del traductor: el mínimo que admite el modelo (`LOW` en 3.8 Flash, `MINIMAL` en 3.5 Flash-Lite) |
+| `TRANSLATE_TIMEOUT_S`  | `10`  | Límite por llamada de traducción |
 | `TRANSLATION_CONTEXT_SEGMENTS`  | `3`  | Frases previas enviadas como contexto |
-| `HISTORY_MAX_EVENTS`  | `5000`  | Tamaño máximo del historial por pista |
-| `HISTORY_TTL_S`  | `86400`  | Retención del historial |
+| `TRANSLATION_QUEUE_MAX`  | `10`  | Frases pendientes por pista antes de descartar la más antigua (§6.3.5) |
+| `AUDIO_CHUNK_MS`  | `100`  | Tamaño de bloque de audio |
+| `AUDIO_QUEUE_MAX_CHUNKS`  | `50`  | Bloques pendientes entre ingesta y Transcriptor antes de descartar (§6.1.6) |
+| `VOICE_RMS_THRESHOLD`  | `500`  | Umbral de energía para detectar voz en el reloj de audio (§8) |
+| `AUDIO_CLOCK_WINDOW_S`  | `120`  | Ventana que guarda el reloj de audio |
+| `SOURCE_END_GRACE_MS`  | `3000`  | Espera del último final y de las traducciones al terminar la fuente |
+| `STATUS_INTERVAL_S`  | `2`  | Periodo de publicación de `SessionStatus` (§7.2) |
+| `STATUS_TTL_S`  | `15`  | Expiración de `SessionStatus` (§7.2) |
+| `MAX_SEGMENT_MS`  | `6000`  | Duración máxima de una frase antes del corte forzado (P1) |
+| `HISTORY_MAX_EVENTS`  | `5000`  | Tamaño máximo del historial por pista (P1) |
+| `HISTORY_TTL_S`  | `86400`  | Retención del historial (P1) |
 | `SESSIONS_FILE`  | `sessions.yaml`  | Ruta de la configuración |
 | `WORKER_SESSIONS`  | vacío | Escenarios que atiende este worker (vacío = todos) |
 | `GATEWAY_PORT`  | `8000`  | Puerto del gateway |
+| `WS_PING_S`  | `20`  | Periodo del ping del WebSocket (§7.6) |
+| `WS_CLIENT_QUEUE_MAX`  | `100`  | Eventos pendientes por cliente WebSocket antes de descartar el más antiguo |
 | `LOG_LEVEL`  | `INFO`  | Nivel de logs |
 ---
 
@@ -281,7 +296,9 @@ Mensajes del WebSocket: `{"type": "subtitle", "data": SubtitleEvent}` y `{"type"
 - **Latencia del original final:** hora de emisión del evento menos la hora real en que se envió el audio correspondiente a su `end_ms` , según el reloj de audio de la ingesta.
 - **Latencia de la traducción:** hora de emisión de la traducción menos la misma referencia del original. Además se registra por separado el tiempo propio de traducción (final original → traducción).
 - **Distribución:** el Gateway mide el tiempo entre la recepción desde Redis y el envío por WebSocket.
-Si la Live API entrega marcas de tiempo por enunciado, se usan para `start_ms` y `end_ms`; si no, se aproximan con el reloj de audio al recibir el primer parcial y el final (a verificar en la prueba técnica).
+Si la Live API entrega marcas de tiempo por enunciado, se usan para `start_ms` y `end_ms` (a verificar en la prueba técnica). Si no, se aproximan con el reloj de audio y una detección de voz por energía: cada bloque se marca con voz si su energía RMS supera `VOICE_RMS_THRESHOLD`. `end_ms` es el último bloque con voz antes de recibir el final y `start_ms` es el primer bloque con voz después del final anterior. No se usa la posición del audio al *recibir* el evento, porque daría una latencia cercana a 0 por construcción.
+
+La latencia se mide y viaja en cada evento (`latency_ms`) desde P0; la validación contra los objetivos es P1.
 
 | Métrica | Objetivo del MVP |
 | ----- | ----- |
@@ -353,18 +370,21 @@ live-subs/
 ├── CLAUDE.md
 ├── AGENTS.md
 ├── .claude/skills/
+├── .specify/memory/
+│   └── constitution.md
 ├── docs/
-│   ├── constitution.md
-│   ├── architecture.md      # este documento
-│   ├── spec.md
-│   └── tasks.md
+│   └── architecture.md      # este documento
+├── specs/
+│   └── 001-subs-mvp/        # spec.md, plan.md, research.md, tasks.md, contracts/...
 ├── samples/
-│   ├── audio/
+│   ├── audio/               # clips EN y ES generados con TTS + guiones + README.md con su origen
+│   ├── local/               # audio real solo para pruebas locales (en .gitignore)
 │   └── glossaries/
+├── scripts/                 # t0/ (prueba técnica), make_clips.py, replay_events.py
 ├── src/subs/
-│   ├── common/   (config.py, schema.py)
+│   ├── common/   (config.py, schema.py, queues.py, logs.py)
 │   ├── worker/   (main.py, ingest.py, transcriber.py, translator.py, publisher.py)
-│   └── gateway/  (main.py, static/index.html, static/overlay.html, static/panel.html)
+│   └── gateway/  (main.py, static/index.html, static/overlay.html (P1), static/panel.html (P1))
 └── tests/
 ```
 ---
