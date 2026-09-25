@@ -22,6 +22,9 @@ P2; criterios de finalización tomados de P0 en §15."
 > (`research.md` § Resultados del probe de corte de frase) pasan a P0 el cierre de frase ajustado y el
 > corte por duración máxima (RF-045, RF-046), la traducción de fragmentos (RF-047) y las últimas
 > frases al conectarse (RF-048).
+>
+> **Cambio de alcance excepcional (2026-09-25).** Para la demo, el overlay para OBS pasa de P1 a P0
+> (RF-049).
 
 ## Escenarios de usuario y pruebas *(obligatorio)*
 
@@ -223,6 +226,11 @@ Formato EARS: *El sistema deberá…* (siempre), *Cuando…* (evento), *Mientras
   rutas; las fuentes solo se definen en la configuración del operador.
 - **RF-044**: La vista de audiencia deberá ser legible en celular y en escritorio, con alto contraste
   entre texto y fondo, y deberá permitir que el espectador ajuste el tamaño de letra.
+- **RF-049**: El sistema deberá ofrecer un overlay para OBS/vMix que muestre en vivo los subtítulos de
+  un escenario y una pista indicados en la URL, con tamaño de letra, posición (arriba o abajo) y
+  parciales (sí o no) configurables por URL. El overlay deberá tener fondo 100 % transparente, mostrar
+  como máximo 2 líneas de texto blanco con contorno oscuro, no mostrar controles, fusionar los eventos
+  como la vista de audiencia (RF-019 a RF-021) y reconectarse solo si se corta la conexión.
 
 **Sesiones simultáneas e independientes**
 
@@ -351,7 +359,7 @@ Todo lo P1 y P2 de `docs/architecture.md` §4:
 
 - **P1**: reconexión ante cierre de la conexión de transcripción; glosarios; historial completo para
   espectadores que llegan tarde (más allá de las últimas frases de RF-048) y reconexión automática del
-  cliente; panel de estado y latencia; exportación SRT/VTT/TXT; overlay para OBS/vMix; portugués;
+  cliente; panel de estado y latencia; exportación SRT/VTT/TXT; portugués;
   traducción agrupada de frases pendientes para recuperar el retraso; reintento de traducciones
   fallidas; reintento ante caída de la mensajería interna.
 - **P2**: panel de producción completo; modo bilingüe; idioma de origen automático; recarga en caliente
