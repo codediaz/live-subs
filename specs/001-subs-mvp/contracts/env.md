@@ -8,6 +8,7 @@ por defecto del P0 e indica qué servicio recibe cada variable.
 | `GEMINI_API_KEY` | — (obligatoria) | worker | Credencial. **El gateway no la recibe** (RF-031) |
 | `REDIS_URL` | `redis://redis:6379/0` | ambos | Conexión a Redis |
 | `TRANSCRIBE_MODEL` | `gemini-3.5-transcribe-live` | worker | Modelo de transcripción |
+| `TRANSCRIBE_VOCABULARY` | `Nerdearla,Konex,Kubernetes,Gemini,open source` | worker | Términos separados por comas para la transcripción Live y la preservación en traducciones (RF-050) |
 | `TRANSLATE_MODEL` | `gemini-3.5-flash-lite` | worker | Modelo de traducción (R2, cerrada en T0; alternativa: `gemini-3.8-flash`) |
 | **Δ** `TRANSLATE_THINKING_LEVEL` | `MINIMAL` | worker | Nivel de razonamiento: el mínimo que admite el modelo (R3; `LOW` si se usa `gemini-3.8-flash`) |
 | **Δ** `TRANSLATE_TIMEOUT_S` | `10` | worker | Límite por llamada de traducción (RF-015) |
