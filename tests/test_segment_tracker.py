@@ -97,6 +97,16 @@ class TestRevisionsAndSegments:
         assert translation_sequence == 2
         assert events[2].sequence == 3
 
+    def test_open_since_tracks_the_first_partial_until_the_final(self, tracker):
+        assert tracker.open_since_ms is None
+        tracker.on_interim("hello", now_ms=at(700))
+        tracker.on_interim("hello world", now_ms=at(1200))
+        assert tracker.open_since_ms == at(700)
+        tracker.on_final("Hello world.", now_ms=at(2900))
+        assert tracker.open_since_ms is None
+        tracker.on_interim("second", now_ms=at(3600))
+        assert tracker.open_since_ms == at(3600)
+
     def test_events_are_valid_subtitle_events(self, tracker):
         event = tracker.on_interim("hello", now_ms=at(700))
         assert isinstance(event, SubtitleEvent)
