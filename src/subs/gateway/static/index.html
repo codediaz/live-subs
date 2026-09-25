@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live Subs — Audience</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #111827; color: #f9fafb; }
+    body { margin: 0; min-height: 100vh; }
+    main { width: min(100% - 2rem, 58rem); margin: 0 auto; padding: 2rem 0 4rem; }
+    header { margin-bottom: 2rem; }
+    h1 { margin: 0 0 .4rem; font-size: 1.8rem; }
+    p { margin: .4rem 0; }
+    .muted { color: #cbd5e1; }
+    .controls { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1.5rem 0; }
+    label { display: grid; gap: .4rem; flex: 1 1 16rem; font-weight: 600; }
+    select { width: 100%; padding: .7rem; border: 1px solid #94a3b8; border-radius: .4rem; background: #1f2937; color: #f9fafb; font: inherit; }
+    .talk { border-top: 1px solid #475569; padding-top: 1rem; }
+    #subtitles { display: grid; gap: .8rem; margin-top: 1.5rem; font-size: 1.65rem; line-height: 1.45; overflow-wrap: anywhere; }
+    .line { margin: 0; padding: .45rem .75rem; border-left: 3px solid #60a5fa; background: #1f2937; }
+    .line.partial { color: #cbd5e1; border-left-color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Live Subs</h1>
+      <p class="muted">Live captions for the talk you choose.</p>
+    </header>
+    <div class="controls">
+      <label for="session">Stage
+        <select id="session" disabled></select>
+      </label>
+      <label for="track">Captions
+        <select id="track" disabled></select>
+      </label>
+    </div>
+    <section class="talk" aria-label="Current talk">
+      <h2 id="title">Choose a stage</h2>
+      <p id="details" class="muted"></p>
+      <p id="connection" class="muted" role="status">Loading stages…</p>
+      <div id="subtitles" aria-live="polite" aria-relevant="additions text"></div>
+    </section>
+  </main>
+  <script>
+    const sessionSelect = document.getElementById('session');
+    const trackSelect = document.getElementById('track');
+    const title = document.getElementById('title');
+    const details = document.getElementById('details');
+    const connection = document.getElementById('connection');
+    const subtitles = document.getElementById('subtitles');
+    let sessions = [];
+    let socket = null;
+    let selectionVersion = 0;
+    let currentRun = null;
+    const events = new Map();
+
+    function clearCaptions() {
+      currentRun = null;
+      events.clear();
+      subtitles.replaceChildren();
+    }
+
+    function renderCaptions() {
+      const lines = [...events.values()].sort((a, b) =>
+        a.start_ms - b.start_ms || a.segment_id - b.segment_id);
+      subtitles.replaceChildren(...lines.map(event => {
+        const line = document.createElement('p');
+        line.className = event.is_final ? 'line' : 'line partial';
+        line.textContent = event.text;
+        return line;
+      }));
+    }
+
+    function acceptEvent(event) {
+      if (event.session_id !== sessionSelect.value || event.track !== trackSelect.value) return;
+      if (currentRun !== event.run_id) {
+        if (currentRun !== null && event.run_id < currentRun) return;
+        clearCaptions();
+        currentRun = event.run_id;
+      }
+      const key = `${event.run_id}:${event.track}:${event.segment_id}`;
+      const previous = events.get(key);
+      if (previous) {
+        if (previous.is_final && !event.is_final) return;
+        if (previous.is_final === event.is_final && event.revision <= previous.revision) return;
+      }
+      events.set(key, event);
+      renderCaptions();
+    }
+
+    function connectSelection() {
+      const version = ++selectionVersion;
+      if (socket) socket.close();
+      socket = null;
+      clearCaptions();
+      const session = sessions.find(item => item.id === sessionSelect.value);
+      const track = trackSelect.value;
+      if (!session || !session.tracks.includes(track)) return;
+      title.textContent = session.title;
+      details.textContent = `${session.name} · Source language: ${session.source_language} · Track: ${track}`;
+      connection.textContent = 'Connecting…';
+      const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const url = `${scheme}//${location.host}/ws/${encodeURIComponent(session.id)}?tracks=${encodeURIComponent(track)}`;
+      const activeSocket = new WebSocket(url);
+      socket = activeSocket;
+      activeSocket.onopen = () => {
+        if (version === selectionVersion) connection.textContent = 'Live';
+      };
+      activeSocket.onmessage = message => {
+        if (version !== selectionVersion) return;
+        let payload;
+        try { payload = JSON.parse(message.data); } catch { return; }
+        if (payload.type === 'subtitle' && payload.data) acceptEvent(payload.data);
+      };
+      activeSocket.onclose = () => {
+        if (version === selectionVersion) connection.textContent = 'Disconnected';
+      };
+      activeSocket.onerror = () => {
+        if (version === selectionVersion) connection.textContent = 'Connection error';
+      };
+    }
+
+    function updateTracks() {
+      const session = sessions.find(item => item.id === sessionSelect.value);
+      trackSelect.replaceChildren(...(session?.tracks ?? []).map(track => {
+        const option = document.createElement('option');
+        option.value = track;
+        option.textContent = track === 'original' ? `Original (${session.source_language})` : track;
+        return option;
+      }));
+      trackSelect.disabled = !session;
+      connectSelection();
+    }
+
+    sessionSelect.addEventListener('change', updateTracks);
+    trackSelect.addEventListener('change', connectSelection);
+
+    async function loadStages() {
+      try {
+        const response = await fetch('/api/sessions');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        sessions = await response.json();
+        sessionSelect.replaceChildren(...sessions.map(session => {
+          const option = document.createElement('option');
+          option.value = session.id;
+          option.textContent = session.name;
+          return option;
+        }));
+        sessionSelect.disabled = sessions.length === 0;
+        if (sessions.length) updateTracks();
+        else connection.textContent = 'No stages configured';
+      } catch {
+        connection.textContent = 'Could not load stages';
+      }
+    }
+
+    loadStages();
+  </script>
+</body>
+</html>
