@@ -362,7 +362,7 @@ traducciones vinculadas a su frase y la vista legible en celular.
   - **RF**: RF-026, RF-043.
   - **Hecho cuando** (quickstart V3): `docker compose exec redis redis-cli GET run:sala1` cambia
     después de cada vuelta del clip; la vista limpia la pantalla y sigue.
-- [ ] T034 [US2] Verificar la fuente de stream con un `sessions.stream.yaml` temporal (no se versiona)
+- [x] T034 [US2] Verificar la fuente de stream con un `sessions.stream.yaml` temporal (no se versiona)
   y la URL de una radio o HLS pública, y corregir `ingest.py` si hace falta.
   - **RF**: RF-002, RF-025.
   - **Hecho cuando** (quickstart V5): con `SESSIONS_FILE=sessions.stream.yaml`, ese escenario produce
