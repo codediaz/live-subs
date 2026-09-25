@@ -548,6 +548,27 @@ paralelo: tocan archivos distintos. T053 va al final.
 
 **Checkpoint**: P0 validado de punta a punta (§15 de la arquitectura, bloque P0).
 
+### Overlay para OBS — cambio de alcance excepcional (2026-09-25)
+
+- [x] T054 [US2] Overlay para OBS/vMix en `src/subs/gateway/static/overlay.html` (HTML + CSS + JS
+  nativo, sin build), servido en `GET /overlay.html`:
+  - parámetros por URL:
+    - `session` y `track`;
+    - `size` en px, por defecto 42;
+    - `position`, `bottom` o `top`;
+    - `partials`, `true` o `false`;
+  - fondo 100 % transparente, máximo 2 líneas, texto blanco con contorno oscuro y sin controles
+    visibles;
+  - la misma fusión de eventos que `index.html`: clave `(run_id, track, segment_id)`, gana la
+    `revision` mayor y un `run_id` nuevo limpia la pantalla;
+  - si se corta el WebSocket, se reconecta cada 2 s;
+  - test primero: `tests/test_gateway_http.py` pide `GET /overlay.html`;
+  - actualizar `specs/001-subs-mvp/contracts/gateway-api.md` (la ruta pasa a P0).
+  - **RF**: RF-049.
+  - **Hecho cuando**: `pytest -q` en verde y
+    `http://localhost:8000/overlay.html?session=sala2&track=en` muestra los subtítulos sobre fondo
+    transparente.
+
 ---
 
 ## Fase 6: Entrega
