@@ -20,12 +20,16 @@ por defecto del P0 e indica qué servicio recibe cada variable.
 | **Δ** `SOURCE_END_GRACE_MS` | `3000` | worker | Espera del último final y de las traducciones al terminar la fuente |
 | **Δ** `STATUS_INTERVAL_S` | `2` | worker | Periodo de publicación de `SessionStatus` (§7.2) |
 | **Δ** `STATUS_TTL_S` | `15` | worker | Expiración de `SessionStatus` (§7.2) |
+| **Δ** `VAD_END_SENSITIVITY` | `HIGH` | worker | Sensibilidad de fin de voz, `HIGH` o `LOW` (RF-045, R5) |
+| **Δ** `VAD_SILENCE_MS` | `300` | worker | Silencio que cierra una frase (RF-045, R5) |
+| `MAX_SEGMENT_MS` | `8000` | worker | Duración máxima de una frase abierta antes del corte forzado (RF-046, R5) |
 | `SESSIONS_FILE` | `sessions.yaml` | ambos | Ruta de la configuración |
 | `WORKER_SESSIONS` | vacío | worker | Escenarios de este worker (RF-027) |
 | `GATEWAY_PORT` | `8000` | gateway | Puerto del gateway |
 | **Δ** `WS_PING_S` | `20` | gateway | Ping del WebSocket (§7.6) |
 | **Δ** `WS_CLIENT_QUEUE_MAX` | `100` | gateway | Eventos pendientes por cliente (R7) |
+| **Δ** `RECENT_FINALS_N` | `5` | gateway | Últimas frases finales por pista enviadas al conectarse (RF-048, R18) |
 | `LOG_LEVEL` | `INFO` | ambos | Nivel de logs |
 
-`MAX_SEGMENT_MS`, `HISTORY_MAX_EVENTS` y `HISTORY_TTL_S` son P1: pueden estar en `.env.example`
-comentadas, pero en P0 no se leen.
+`HISTORY_MAX_EVENTS` y `HISTORY_TTL_S` son P1: pueden estar en `.env.example` comentadas, pero en P0
+no se leen.
