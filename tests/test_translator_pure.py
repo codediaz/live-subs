@@ -66,6 +66,14 @@ class TestFinalHistory:
 
 
 class TestPrompt:
+    def test_vocabulary_terms_are_preserved_as_names_and_jargon(self):
+        instruction = system_instruction("es", "en", ["Nerdearla", "open source"])
+        assert "Nerdearla" in instruction
+        assert "open source" in instruction
+        assert "proper nouns" in instruction.lower()
+        assert "technical jargon" in instruction.lower()
+        assert "do not translate" in instruction.lower()
+
     def test_system_instruction_names_languages_and_asks_for_translation_only(self):
         instruction = system_instruction("en", "es")
         assert "English" in instruction

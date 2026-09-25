@@ -40,12 +40,12 @@ class FinalHistory:
         return list(self._texts)
 
 
-def system_instruction(source_language: str, target_language: str) -> str:
+def system_instruction(source_language: str, target_language: str, vocabulary: list[str] | None = None) -> str:
     try:
         source, target = LANGUAGE_NAMES[source_language], LANGUAGE_NAMES[target_language]
     except KeyError as exc:
         raise ValueError(f"unsupported language: {exc.args[0]}") from None
-    return (
+    instruction = (
         f"You translate live conference subtitles from {source} to {target}. "
         "Return only the translation of the sentence, with no quotes, notes or explanations. "
         # RF-047: forced cuts close sentences mid-way.
@@ -53,6 +53,12 @@ def system_instruction(source_language: str, target_language: str) -> str:
         "do not complete it and do not add content; use the previous sentences to understand it. "
         "Keep product names, code identifiers and technical terms that are usually left untranslated."
     )
+    if vocabulary:
+        instruction += (
+            " Treat these vocabulary terms as proper nouns or technical jargon;"
+            " preserve their spelling and do not translate them: " + ", ".join(vocabulary) + "."
+        )
+    return instruction
 
 
 def build_prompt(title: str, context: list[str], sentence: str) -> str:
@@ -115,6 +121,7 @@ class TrackTranslator:
         source_language: str,
         target: str,
         title: str,
+        vocabulary: list[str],
         model: str,
         thinking_level: str,
         timeout_s: float,
@@ -133,7 +140,7 @@ class TrackTranslator:
         self.publish = publish
         self.on_error = on_error
         self.config = types.GenerateContentConfig(
-            system_instruction=system_instruction(source_language, target),
+            system_instruction=system_instruction(source_language, target, vocabulary),
             # Minimum reasoning the model allows, to keep latency low (research.md R3).
             thinking_config=types.ThinkingConfig(thinking_level=thinking_level, include_thoughts=False),
             # No tools are used; skip the SDK's function-calling loop.

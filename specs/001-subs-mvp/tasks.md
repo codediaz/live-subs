@@ -569,6 +569,13 @@ paralelo: tocan archivos distintos. T053 va al final.
     `http://localhost:8000/overlay.html?session=sala2&track=en` muestra los subtítulos sobre fondo
     transparente.
 
+- [x] T055 [US1] Vocabulario mínimo de transcripción y traducción (RF-050): agregar
+  `TRANSCRIBE_VOCABULARY` a la configuración del worker, `.env.example` y contrato de entorno;
+  pasarlo a `AudioTranscriptionConfig.custom_vocabulary` y al prompt del traductor.
+  - Tests primero: parseo de la lista, valor por defecto y preservación de los términos en el prompt.
+  - **Hecho cuando**: los tests nuevos y `pytest -q` pasan, `git diff --check` pasa, y en el video de
+    demo `Nerdearla` aparece bien escrito en `original` y se conserva en la traducción `en`.
+
 ---
 
 ## Fase 6: Entrega

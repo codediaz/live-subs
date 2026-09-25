@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal, Self
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from subs.common.schema import ORIGINAL_TRACK
 
@@ -46,6 +46,9 @@ class WorkerSettings(_EnvSettings):
     gemini_api_key: str = Field(repr=False)
     redis_url: str = "redis://redis:6379/0"
     transcribe_model: str = "gemini-3.5-transcribe-live"
+    transcribe_vocabulary: list[str] = Field(
+        default_factory=lambda: "Nerdearla,Konex,Kubernetes,Gemini,open source".split(",")
+    )
     translate_model: str = "gemini-3.5-flash-lite"
     translate_thinking_level: Literal["MINIMAL", "LOW", "MEDIUM", "HIGH"] = "MINIMAL"
     translate_timeout_s: float = 10
@@ -64,6 +67,13 @@ class WorkerSettings(_EnvSettings):
     sessions_file: str = "sessions.yaml"
     worker_sessions: str = ""
     log_level: str = "INFO"
+
+    @field_validator("transcribe_vocabulary", mode="before")
+    @classmethod
+    def parse_transcribe_vocabulary(cls, value: str | list[str]) -> list[str]:
+        if isinstance(value, str):
+            return [term.strip() for term in value.split(",") if term.strip()]
+        return value
 
 
 class GatewaySettings(_EnvSettings):
