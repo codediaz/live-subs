@@ -68,7 +68,7 @@ escribir la aplicación. R1 ya está cerrada en el pipeline A.
 
 **Propósito**: imágenes, paquete, configuración de ejemplo y clips de prueba.
 
-- [ ] T002 Validar las imágenes fijadas en `research.md` (R16) con `docker pull`.
+- [x] T002 Validar las imágenes fijadas en `research.md` (R16) con `docker pull`.
   - **RF**: RF-033.
   - **Hecho cuando**: `docker pull python:3.12.14-slim-trixie && docker pull redis:8.10.2-alpine`
     termina con código 0. Si falta un tag, se para y se pregunta.
