@@ -155,12 +155,12 @@ escribir la aplicación. R1 ya está cerrada en el pipeline A.
   y contador).
   - **RF**: RF-004, RF-014.
   - **Hecho cuando**: `pytest -q` en verde.
-- [ ] T013 [P] Escribir `tests/test_logs.py` antes de la implementación:
+- [x] T013 [P] Escribir `tests/test_logs.py` antes de la implementación:
   - cada registro es JSON con `level`, `msg` y `session_id`;
   - en INFO, un campo `text` o `audio` pasado por error no aparece en la salida.
   - **RF**: RF-034.
   - **Hecho cuando**: `pytest -q tests/test_logs.py` falla solo por la implementación faltante.
-- [ ] T014 Implementar `src/subs/common/logs.py` (formateador JSON con `logging` estándar y
+- [x] T014 Implementar `src/subs/common/logs.py` (formateador JSON con `logging` estándar y
   `setup_logging(level)`).
   - **RF**: RF-034.
   - **Hecho cuando**: `pytest -q` en verde.
