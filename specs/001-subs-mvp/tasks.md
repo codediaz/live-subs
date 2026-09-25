@@ -489,7 +489,7 @@ paralelo: tocan archivos distintos. T053 va al final.
     publican finales en `original`. Mientras hay voz, entre dos finales seguidos de la misma
     ejecución nunca pasan más de 10 s (según `emitted_at_ms`). `docker compose logs worker` muestra
     eventos `forced_cut`.
-- [ ] T049 [P] [US1] Actualizar `tests/test_translator_pure.py` antes de la implementación. La
+- [x] T049 [P] [US1] Actualizar `tests/test_translator_pure.py` antes de la implementación. La
   instrucción del traductor debe:
   - decir que el texto puede ser un fragmento de una frase más larga;
   - pedir que se traduzca como fragmento, sin completarlo ni agregar contenido;
@@ -497,7 +497,7 @@ paralelo: tocan archivos distintos. T053 va al final.
   - **RF**: RF-047.
   - **Hecho cuando**: `pytest -q tests/test_translator_pure.py` falla solo por la implementación
     faltante.
-- [ ] T050 [US1] Implementar el cambio del prompt en `src/subs/worker/translator.py`
+- [x] T050 [US1] Implementar el cambio del prompt en `src/subs/worker/translator.py`
   (`system_instruction` / `build_prompt`).
   - **RF**: RF-047.
   - **Hecho cuando**: `pytest -q` en verde. En `http://localhost:8000/`, con `sala2` → `en`, 5 líneas
