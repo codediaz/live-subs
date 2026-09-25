@@ -204,7 +204,7 @@ Principio 13: cada dependencia tiene un motivo. Todas son directas y van fijadas
 | --- | --- | --- | --- |
 | `fastapi` | 0.141.1 | HTTP y WebSocket del gateway | Stack de la constitución (principio 1) |
 | `uvicorn` | 0.53.0 | Servidor ASGI del gateway | El servidor estándar de FastAPI; sin extras `[standard]` para no sumar `uvloop`, `httptools` ni `watchfiles` |
-| `websockets` | 17.1 | Soporte WebSocket de uvicorn; su CLI (`python -m websockets`) sirve para verificar el WS | uvicorn necesita una biblioteca WS; esta es la de referencia |
+| `websockets` | 16.1.1 | Soporte WebSocket de uvicorn; su CLI (`python -m websockets`) sirve para verificar el WS | uvicorn necesita una biblioteca WS; esta es la de referencia. Se queda en 16.x porque `google-genai==2.25.0` exige `websockets<17.0` (detectado en T003) |
 | `pydantic` | 2.13.5 | `SubtitleEvent`, `SessionStatus` y validación de configuración | Stack de `AGENTS.md`; ya lo trae FastAPI, se fija porque se usa directo |
 | `redis` | 8.1.0 | Cliente asyncio: pub/sub y claves | Cliente oficial; incluye asyncio |
 | `google-genai` | 2.25.0 | Live API (transcripción) y traducción de texto | SDK oficial; tiene `interim_input_transcription` y `thinking_level` |
