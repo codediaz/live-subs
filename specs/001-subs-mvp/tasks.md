@@ -267,7 +267,7 @@ elegir `sala1` → `original` y ver parciales y finales (quickstart V2, paso 1).
   - **Hecho cuando**: con `WORKER_SESSIONS=sala1 docker compose up redis worker`,
     `docker compose exec redis redis-cli PSUBSCRIBE 'subs:*'` muestra en `subs:sala1:original`
     parciales con `revision` creciente y finales con `is_final: true` y `latency_ms`, a ritmo real.
-- [ ] T025 [US1] Implementar la parte HTTP de `src/subs/gateway/main.py` y `src/subs/gateway/__main__.py`
+- [x] T025 [US1] Implementar la parte HTTP de `src/subs/gateway/main.py` y `src/subs/gateway/__main__.py`
   según `contracts/gateway-api.md`:
   - `GET /healthz` (200 si Redis responde a `PING`, si no 503);
   - `GET /api/sessions` (`id`, `name`, `title`, `source_language`, `tracks`; **sin `source`**);
@@ -277,7 +277,7 @@ elegir `sala1` → `original` y ver parciales y finales (quickstart V2, paso 1).
   - **RF**: RF-016, RF-022, RF-031.
   - **Hecho cuando**: con el stack arriba, `curl -s localhost:8000/healthz` da 200 y
     `curl -s localhost:8000/api/sessions` lista `sala1` y `sala2` sin el campo `source`.
-- [ ] T026 [US1] Implementar el WebSocket en `src/subs/gateway/main.py`:
+- [x] T026 [US1] Implementar el WebSocket en `src/subs/gateway/main.py`:
   - `WS /ws/{session_id}?tracks=`, con cierre 1008 si la sesión o la pista son inválidas;
   - **una** suscripción `PSUBSCRIBE subs:*` por gateway con reparto en memoria por
     `(session_id, track)` (R8);
@@ -286,7 +286,7 @@ elegir `sala1` → `original` y ver parciales y finales (quickstart V2, paso 1).
   - **RF**: RF-017, RF-022.
   - **Hecho cuando**: `python -m websockets "ws://localhost:8000/ws/sala1?tracks=original"` muestra
     mensajes `{"type": "subtitle", ...}` y pings.
-- [ ] T027 [US1] Crear la vista `src/subs/gateway/static/index.html` (HTML + CSS + JS nativo, sin build):
+- [x] T027 [US1] Crear la vista `src/subs/gateway/static/index.html` (HTML + CSS + JS nativo, sin build):
   - selector de escenario y pista desde `/api/sessions`;
   - WebSocket a la pista elegida;
   - mapa por `(run_id, track, segment_id)` donde gana la `revision` mayor y un final reemplaza a un
