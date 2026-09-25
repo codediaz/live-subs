@@ -111,7 +111,7 @@ escribir la aplicación. R1 ya está cerrada en el pipeline A.
 
 **Propósito**: contrato, configuración, colas, logs e imagen. Tests primero en cada función pura.
 
-- [ ] T007 [P] Escribir `tests/test_schema.py` antes de la implementación.
+- [x] T007 [P] Escribir `tests/test_schema.py` antes de la implementación.
   - `SubtitleEvent` según `docs/architecture.md` §7.1: `schema_version: Literal[1] = 1`,
     `kind: Literal["original", "translation"]`, `revision: int = 0`, `end_ms` y `latency_ms`
     opcionales.
@@ -120,7 +120,7 @@ escribir la aplicación. R1 ya está cerrada en el pipeline A.
   - **RF**: RF-035, RF-039.
   - **Hecho cuando**: `pytest -q tests/test_schema.py` falla por no encontrar el módulo o sus
     símbolos, y no por errores del test.
-- [ ] T008 Implementar `src/subs/common/schema.py` (`SubtitleEvent`, `SessionStatus`, más una función
+- [x] T008 Implementar `src/subs/common/schema.py` (`SubtitleEvent`, `SessionStatus`, más una función
   pura que arma el nombre de canal `subs:{session_id}:{track}`).
   - **RF**: RF-035, RF-036, RF-037, RF-038, RF-039.
   - **Hecho cuando**: `pytest -q` en verde.
