@@ -200,7 +200,7 @@ consolidan.
 **Prueba independiente**: `WORKER_SESSIONS=sala1 docker compose up`; en `http://localhost:8000/`
 elegir `sala1` → `original` y ver parciales y finales (quickstart V2, paso 1).
 
-- [ ] T017 [P] [US1] Escribir `tests/test_audio_clock.py` antes de la implementación (reloj de audio
+- [x] T017 [P] [US1] Escribir `tests/test_audio_clock.py` antes de la implementación (reloj de audio
   de `data-model.md` §4):
   - posición n → `n × AUDIO_CHUNK_MS`;
   - `sent_at(position_ms)`;
@@ -210,7 +210,7 @@ elegir `sala1` → `original` y ver parciales y finales (quickstart V2, paso 1).
   - latencia final según §8 (`emitted_at − sent_at(end_ms)`).
   - **RF**: RF-005, RF-038.
   - **Hecho cuando**: `pytest -q tests/test_audio_clock.py` falla solo por la implementación faltante.
-- [ ] T018 [US1] Implementar la parte pura de `src/subs/worker/ingest.py`: `AudioClock` y el cálculo
+- [x] T018 [US1] Implementar la parte pura de `src/subs/worker/ingest.py`: `AudioClock` y el cálculo
   RMS con la biblioteca estándar (sin numpy). Si T001 confirmó offsets de la Live API, `AudioClock`
   igual se usa para `sent_at`.
   - **RF**: RF-005, RF-038.
