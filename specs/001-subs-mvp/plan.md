@@ -27,6 +27,12 @@ P0 tres cambios, medidos con `scripts/t0/vad_probe.py` (R5, R18, R19):
 
 Se implementan en T045–T053. `docs/architecture.md` pasa a v0.5.
 
+**Cambio de alcance excepcional (2026-09-25).** Para la demo, el overlay para OBS pasa a P0 (RF-049,
+T054): `gateway/static/overlay.html`, servido en `/overlay.html`. Parámetros por URL: `session`,
+`track`, `size` (px, por defecto 42), `position` (`bottom` o `top`) y `partials` (`true` o `false`).
+Usa la misma fusión de eventos que `index.html` y se reconecta cada 2 s. No agrega dependencias ni
+variables de entorno.
+
 ## Contexto técnico
 
 **Lenguaje/versión**: Python 3.12 (imagen `python:3.12.14-slim-trixie`)
@@ -201,7 +207,9 @@ src/subs/
 └── gateway/
     ├── __main__.py         # python -m subs.gateway
     ├── main.py             # rutas, WebSocket, reparto desde subs:*
-    └── static/index.html   # vista de audiencia (HTML + CSS + JS en un archivo)
+    └── static/
+        ├── index.html      # vista de audiencia (HTML + CSS + JS en un archivo)
+        └── overlay.html    # Δ overlay para OBS/vMix (RF-049)
 tests/
 ├── test_schema.py
 ├── test_config.py
@@ -216,7 +224,8 @@ tests/
 
 **Decisión de estructura**: la de §13 y `AGENTS.md`, con dos módulos chicos en `common/`
 (`queues.py` y `logs.py`, marcados Δ). Los usan el worker y el gateway, y ninguno cabe en la
-responsabilidad de los módulos de §5. `overlay.html` y `panel.html` son P1 y no se crean.
+responsabilidad de los módulos de §5. `overlay.html` pasa a P0 por el cambio de alcance (RF-049);
+`panel.html` es P1 y no se crea.
 
 ## Cobertura de requisitos por módulo
 
@@ -231,8 +240,9 @@ responsabilidad de los módulos de §5. `overlay.html` y `panel.html` son P1 y n
 | `worker/transcriber.py` | RF-003 (envío continuo), RF-006, RF-007, RF-008, RF-025 (falla de la Live API), RF-045, RF-046 |
 | `worker/translator.py` | RF-009, RF-010, RF-011, RF-012, RF-013, RF-014, RF-015, RF-047 |
 | `worker/publisher.py` | RF-024 (`run:*`), RF-025 y RF-026 (`status:*`), RF-036 (canal por pista), RF-038 (`emitted_at_ms`, `latency_ms`) |
-| `gateway/main.py` | RF-016, RF-017, RF-022, RF-031 (no lee la key), RF-048 |
+| `gateway/main.py` | RF-016, RF-017, RF-022, RF-031 (no lee la key), RF-048, RF-049 (ruta `/overlay.html`) |
 | `gateway/static/index.html` | RF-016, RF-017, RF-018, RF-019, RF-020, RF-021, RF-044 |
+| `gateway/static/overlay.html` | RF-049 |
 | `Dockerfile`, `docker-compose.yml`, `.env.example` | RF-030, RF-031, RF-033; `RECENT_FINALS_N` en el entorno del gateway (RF-048) |
 | `sessions.yaml`, `samples/audio/`, `scripts/make_clips.py` | RF-040 |
 | `README.md` | RF-041 |
