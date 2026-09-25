@@ -402,26 +402,22 @@ live-subs/
 
 ## 15. Criterios de validación
 ### P0 — MVP
-- [ ] Dos escenarios simultáneos desde archivos de `samples/audio/`  (uno en inglés, uno en español).
-- [ ] Original parcial y final en pantalla, sin parciales obsoletos.
-- [ ] Traducción EN→ES en la sala en inglés y ES→EN en la sala en español, vinculadas a su frase original.
-- [ ] La vista de audiencia permite elegir sesión y pista.
-- [ ] Al abrir la vista, cada pista (también las traducidas) muestra una línea en menos de 30 segundos: últimas frases al conectarse y ninguna frase abierta más de `MAX_SEGMENT_MS`.
-- [ ] `docker compose up`  funciona desde un clon limpio siguiendo el README.
-- [ ] El README explica credenciales, modelos y cómo escalar.
+- [x] Dos escenarios simultáneos desde archivos de `samples/audio/`  (uno en inglés, uno en español).
+- [x] Original parcial y final en pantalla, sin parciales obsoletos.
+- [x] Traducción EN→ES en la sala en inglés y ES→EN en la sala en español, vinculadas a su frase original.
+- [x] La vista de audiencia permite elegir sesión y pista.
+- [x] Al abrir la vista, cada pista (también las traducidas) muestra una línea en menos de 30 segundos: últimas frases al conectarse y ninguna frase abierta más de `MAX_SEGMENT_MS`.
+- [x] `docker compose up`  funciona desde un clon limpio siguiendo el README.
+- [x] El README explica credenciales, modelos y cómo escalar.
 ### P1
 - [ ] La sesión continúa tras un cierre de la conexión Live (prueba de más de 10 minutos).
-- [ ] El glosario corrige al menos un término técnico visible en la demo.
-- [ ] Un cliente que se conecta tarde recupera el historial completo de la ejecución.
+- [x] El glosario corrige al menos un término técnico visible en la demo.
+- [x] Un cliente que se conecta tarde recupera el historial completo de la ejecución.
 - [ ] Exportación SRT/VTT/TXT de una charla completa.
-- [ ] Overlay funcionando en OBS sobre el video de la charla.
+- [x] Overlay funcionando en OBS sobre el video de la charla.
 - [ ] Latencias registradas y dentro de los objetivos de §8.
 ### Pruebas automáticas (mínimas)
 Se prueban las funciones puras, que son baratas de testear y donde un error rompe la demo: validación de `SubtitleEvent` y de `sessions.yaml`; combinación y filtrado del glosario; fusión de eventos por clave y `revision`; generación de SRT y VTT a partir de eventos finales. La integración con Gemini se valida manualmente con los clips de `samples/audio/`.
 
-### Entrega
-- [ ] Video de 1 a 2 minutos con audio real de Nerdearla y subtítulos en inglés generados por el sistema.
-- [ ] Repositorio público con licencia Apache 2.0.
-- [ ] Envío en Devpost antes del viernes 25 a las 10:00 (hora de Ecuador).
 
 
