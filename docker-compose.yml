@@ -1,0 +1,39 @@
+# Live Subs: redis + worker + gateway (docs/architecture.md §11).
+# Setup: cp .env.example .env, set GEMINI_API_KEY, then docker compose up --build
+
+services:
+  redis:
+    image: redis:8.10.2-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]  # no persistence
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  worker:
+    build: .
+    image: live-subs:local
+    command: ["python", "-m", "subs.worker"]
+    env_file: .env  # the only service that receives GEMINI_API_KEY
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  gateway:
+    build: .
+    image: live-subs:local
+    command: ["python", "-m", "subs.gateway"]
+    # Only the variables the gateway uses; never GEMINI_API_KEY (RF-031).
+    environment:
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      SESSIONS_FILE: ${SESSIONS_FILE:-sessions.yaml}
+      GATEWAY_PORT: ${GATEWAY_PORT:-8000}
+      WS_PING_S: ${WS_PING_S:-20}
+      WS_CLIENT_QUEUE_MAX: ${WS_CLIENT_QUEUE_MAX:-100}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "${GATEWAY_PORT:-8000}:${GATEWAY_PORT:-8000}"
+    depends_on:
+      redis:
+        condition: service_healthy

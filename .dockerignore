@@ -1,0 +1,19 @@
+# Secrets and local-only material never enter the build context.
+.env
+.env.*
+!.env.example
+samples/local/
+scripts/t0/
+
+# Not needed in the image.
+.git/
+.venv/
+.claude/
+.specify/
+specs/
+docs/
+tests/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+*.egg-info/

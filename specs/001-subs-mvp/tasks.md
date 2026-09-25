@@ -173,7 +173,7 @@ escribir la aplicación. R1 ya está cerrada en el pipeline A.
   - **Hecho cuando**:
     `python -c "from subs.common.config import load_sessions; print([s.id for s in load_sessions('sessions.yaml', '')])"`
     imprime `['sala1', 'sala2']`.
-- [ ] T016 Crear la imagen y los servicios:
+- [x] T016 Crear la imagen y los servicios:
   - `Dockerfile` desde `python:3.12.14-slim-trixie`, con `ffmpeg` por apt, que copia `src/`,
     `pyproject.toml`, `sessions.yaml`, `samples/audio/` y `scripts/replay_events.py`;
   - `.dockerignore` que excluye `scripts/t0/`, `samples/local/` y `.env`;
