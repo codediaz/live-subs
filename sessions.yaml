@@ -1,0 +1,30 @@
+# Stages (sessions) served by the worker. Contract: specs/001-subs-mvp/contracts/sessions-yaml.md
+# Changes apply after restarting the worker: docker compose restart worker
+#
+# source.type: file | stream   (file paths are relative to this file)
+# source.loop: true replays a file forever; each pass is a new run with a new Live session.
+# source_language: en | es     target_languages: en | es
+
+defaults:
+  target_languages: [es]
+
+sessions:
+  - id: sala1
+    name: "Main stage"
+    title: "The deployment that looked perfect: Kubernetes, CI/CD and observability"
+    source:
+      type: file
+      uri: samples/audio/charla_en.ogg
+      loop: true
+    source_language: en
+    target_languages: [es]
+
+  - id: sala2
+    name: "Workshops room"
+    title: "Una herramienta open source para inscribir gente en talleres"
+    source:
+      type: file
+      uri: samples/audio/charla_es.ogg
+      loop: true
+    source_language: es
+    target_languages: [en]
