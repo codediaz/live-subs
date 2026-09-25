@@ -144,6 +144,7 @@ async def transcribe(
     *,
     model: str,
     source_language: str,
+    vocabulary: list[str],
     session_id: str,
     audio_queue: DropOldestQueue[bytes],
     source_done: asyncio.Event,
@@ -165,6 +166,7 @@ async def transcribe(
         response_modalities=[types.Modality.TEXT],
         input_audio_transcription=types.AudioTranscriptionConfig(
             language_codes=[source_language],
+            custom_vocabulary=vocabulary,
             mode=types.AudioTranscriptionConfigMode.VERBATIM,  # research.md R5
         ),
         # Close sentences on short pauses (RF-045, research.md R5).
