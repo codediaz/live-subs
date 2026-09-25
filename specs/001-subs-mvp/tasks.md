@@ -413,7 +413,7 @@ traducciones vinculadas a su frase y la vista legible en celular.
   - **RF**: RF-041, RF-042.
   - **Hecho cuando** (CE-006): leyendo solo el README se responde qué credencial hace falta, qué
     modelos se usan y cómo pasar de 2 a 100 escenarios.
-- [ ] T038 [US3] Validar desde un clon limpio (quickstart V1) en una carpeta nueva, siguiendo solo el
+- [x] T038 [US3] Validar desde un clon limpio (quickstart V1) en una carpeta nueva, siguiendo solo el
   README y cronometrando.
   - Requiere que el usuario haya commiteado el estado actual.
   - El agente no lee la key: copia el archivo `.env` existente.
@@ -529,7 +529,7 @@ paralelo: tocan archivos distintos. T053 va al final.
 
 **Validación**
 
-- [ ] T053 [US3] Repetir T038: quickstart V1 desde un clon limpio en una carpeta nueva, siguiendo
+- [x] T053 [US3] Repetir T038: quickstart V1 desde un clon limpio en una carpeta nueva, siguiendo
   solo el README y cronometrando.
   - Requiere que el usuario haya commiteado T045–T052.
   - El agente no lee la key: copia el archivo `.env` existente.
