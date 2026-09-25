@@ -124,7 +124,7 @@ escribir la aplicación. R1 ya está cerrada en el pipeline A.
   pura que arma el nombre de canal `subs:{session_id}:{track}`).
   - **RF**: RF-035, RF-036, RF-037, RF-038, RF-039.
   - **Hecho cuando**: `pytest -q` en verde.
-- [ ] T009 [P] Escribir `tests/test_config.py` antes de la implementación, con cada regla de
+- [x] T009 [P] Escribir `tests/test_config.py` antes de la implementación, con cada regla de
   `contracts/sessions-yaml.md`:
   - "`id` es obligatorio, único y sin espacios";
   - "`name`, `title` y `source_language` son obligatorios";
@@ -138,7 +138,7 @@ escribir la aplicación. R1 ya está cerrada en el pipeline A.
   - `GatewaySettings` no tiene `GEMINI_API_KEY`.
   - **RF**: RF-027, RF-028, RF-029, RF-030, RF-031, RF-043.
   - **Hecho cuando**: `pytest -q tests/test_config.py` falla solo por la implementación faltante.
-- [ ] T010 Implementar `src/subs/common/config.py`:
+- [x] T010 Implementar `src/subs/common/config.py`:
   - `WorkerSettings` y `GatewaySettings` (Pydantic, leídos de `os.environ`, con los valores por
     defecto de `contracts/env.md`);
   - `load_sessions(path, worker_sessions)`, que lanza un error con escenario y campo.
