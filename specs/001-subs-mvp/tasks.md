@@ -459,7 +459,7 @@ paralelo: tocan archivos distintos. T053 va al final.
 
 **Worker: corte de frase y prompt del traductor**
 
-- [ ] T046 [P] [US1] Escribir `tests/test_forced_cut.py` antes de la implementación, para la función
+- [x] T046 [P] [US1] Escribir `tests/test_forced_cut.py` antes de la implementación, para la función
   pura `should_force_cut(*, open_since_ms, last_cut_ms, now_ms, max_segment_ms) -> bool` de
   `src/subs/worker/transcriber.py`:
   - sin frase abierta (`open_since_ms` es `None`), no corta;
@@ -469,7 +469,7 @@ paralelo: tocan archivos distintos. T053 va al final.
   - una frase nueva (nuevo `open_since_ms`, `last_cut_ms` en `None`) reinicia la cuenta.
   - **RF**: RF-046.
   - **Hecho cuando**: `pytest -q tests/test_forced_cut.py` falla solo por la implementación faltante.
-- [ ] T047 [US1] VAD ajustado en `src/subs/worker/transcriber.py`:
+- [x] T047 [US1] VAD ajustado en `src/subs/worker/transcriber.py`:
   - `LiveConnectConfig.realtime_input_config` con
     `AutomaticActivityDetection(disabled=False, end_of_speech_sensitivity=END_SENSITIVITY_<VAD_END_SENSITIVITY>, silence_duration_ms=VAD_SILENCE_MS)`;
   - los valores llegan desde `WorkerSettings` por `src/subs/worker/main.py`, sin valores fijos.
@@ -477,7 +477,7 @@ paralelo: tocan archivos distintos. T053 va al final.
   - **Hecho cuando**: `pytest -q` en verde y, con el stack arriba, 90 s de
     `docker compose exec redis redis-cli PSUBSCRIBE 'subs:sala2:original'` muestran al menos 3 eventos
     con `"is_final":true` (antes: 0 en 75 s).
-- [ ] T048 [US1] Corte forzado en `src/subs/worker/transcriber.py`:
+- [x] T048 [US1] Corte forzado en `src/subs/worker/transcriber.py`:
   - implementar `should_force_cut`;
   - la frase abierta empieza con el primer parcial y termina con su final (estado del
     `SegmentTracker`);

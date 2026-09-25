@@ -22,6 +22,15 @@ def now_ms() -> int:
     return time.time_ns() // 1_000_000
 
 
+def should_force_cut(*, open_since_ms: int | None, last_cut_ms: int | None, now_ms: int, max_segment_ms: int) -> bool:
+    """Forced cut rule (RF-046): cut a sentence open for max_segment_ms since its first partial,
+    and again every max_segment_ms after the previous cut while it stays open."""
+    if open_since_ms is None:
+        return False
+    since = open_since_ms if last_cut_ms is None else last_cut_ms
+    return now_ms - since >= max_segment_ms
+
+
 class LiveSessionClosed(RuntimeError):
     """The Live API closed the session while audio was still being sent."""
 
@@ -50,6 +59,8 @@ class SegmentTracker:
         self._start_ms = 0
         self._previous_end_ms = 0
         self._previous_end_sent_at_ms = 0
+        # Wall-clock ms of the first partial of the open sentence; None when no sentence is open.
+        self.open_since_ms: int | None = None
 
     def take_sequence(self) -> int:
         """Next emission number of the run; translations share it with the original track."""
@@ -63,6 +74,7 @@ class SegmentTracker:
             return None
         if not self._open:
             self._open_segment()
+            self.open_since_ms = now_ms
         self._revision += 1
         self._last_text = text
         voiced = self.clock.last_voiced_before(now_ms)
@@ -93,6 +105,7 @@ class SegmentTracker:
         )
 
         self._open = False
+        self.open_since_ms = None
         self._segment_id += 1
         self._previous_end_ms = end_ms
         self._previous_end_sent_at_ms = end_sent_at_ms
@@ -138,6 +151,9 @@ async def transcribe(
     tracker: SegmentTracker,
     on_event: Callable[[SubtitleEvent], Awaitable[None]],
     end_grace_ms: int,
+    vad_end_sensitivity: str,
+    vad_silence_ms: int,
+    max_segment_ms: int,
 ) -> None:
     """Stream the audio queue to one Live session and hand every subtitle event to on_event.
 
@@ -151,11 +167,20 @@ async def transcribe(
             language_codes=[source_language],
             mode=types.AudioTranscriptionConfigMode.VERBATIM,  # research.md R5
         ),
+        # Close sentences on short pauses (RF-045, research.md R5).
+        realtime_input_config=types.RealtimeInputConfig(
+            automatic_activity_detection=types.AutomaticActivityDetection(
+                disabled=False,
+                end_of_speech_sensitivity=types.EndSensitivity[f"END_SENSITIVITY_{vad_end_sensitivity}"],
+                silence_duration_ms=vad_silence_ms,
+            )
+        ),
     )
     async with client.aio.live.connect(model=model, config=config) as session:
         _LOGGER.info("live_session_open", extra={"session_id": session_id, "model": model})
 
         async def send() -> None:
+            last_cut: tuple[int, int] | None = None  # (open_since_ms of the cut sentence, cut time)
             while not (source_done.is_set() and audio_queue.empty()):
                 try:
                     chunk = await asyncio.wait_for(audio_queue.get(), timeout=_QUEUE_POLL_S)
@@ -163,6 +188,16 @@ async def transcribe(
                     continue
                 clock.record(chunk, sent_at_ms=now_ms())
                 await session.send_realtime_input(audio=types.Blob(data=chunk, mime_type=_AUDIO_MIME_TYPE))
+                # Forced cut (RF-046): flush a sentence that stays open too long; audio keeps flowing.
+                open_since = tracker.open_since_ms
+                last_cut_ms = last_cut[1] if last_cut is not None and last_cut[0] == open_since else None
+                cut_at = now_ms()
+                if open_since is not None and should_force_cut(
+                    open_since_ms=open_since, last_cut_ms=last_cut_ms, now_ms=cut_at, max_segment_ms=max_segment_ms
+                ):
+                    await session.send_realtime_input(audio_stream_end=True)
+                    last_cut = (open_since, cut_at)
+                    _LOGGER.info("forced_cut", extra={"session_id": session_id})
 
         async def receive() -> None:
             while True:

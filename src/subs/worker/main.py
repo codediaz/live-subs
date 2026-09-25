@@ -201,6 +201,9 @@ async def _run_once(
                     tracker=tracker,
                     on_event=on_event,
                     end_grace_ms=settings.source_end_grace_ms,
+                    vad_end_sensitivity=settings.vad_end_sensitivity,
+                    vad_silence_ms=settings.vad_silence_ms,
+                    max_segment_ms=settings.max_segment_ms,
                 )
             )
         await asyncio.gather(*(t.drain(settings.source_end_grace_ms / 1000) for t in translators))
