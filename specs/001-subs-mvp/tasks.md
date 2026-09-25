@@ -296,7 +296,7 @@ elegir `sala1` → `original` y ver parciales y finales (quickstart V2, paso 1).
   - **RF**: RF-016, RF-017, RF-018, RF-019, RF-020, RF-021.
   - **Hecho cuando** (quickstart V2, paso 1): en `http://localhost:8000/`, con `sala1` → `original`,
     el texto de la frase en curso se actualiza y queda fijo al terminar, sin parciales viejos.
-- [ ] T028 [P] [US1] Crear `scripts/replay_events.py --session <id>`. Publica en
+- [x] T028 [P] [US1] Crear `scripts/replay_events.py --session <id>`. Publica en
   `subs:<id>:original` una secuencia fija de `SubtitleEvent`:
   - parciales duplicados;
   - revisiones desordenadas;
