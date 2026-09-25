@@ -250,7 +250,7 @@ elegir `sala1` → `original` y ver parciales y finales (quickstart V2, paso 1).
   - una excepción de la sesión se propaga al supervisor.
   - **RF**: RF-003, RF-006, RF-007, RF-008, RF-025.
   - **Hecho cuando**: se verifica junto con T024 (la sesión sola no tiene salida observable).
-- [ ] T023 [P] [US1] Implementar `src/subs/worker/publisher.py`:
+- [x] T023 [P] [US1] Implementar `src/subs/worker/publisher.py`:
   - `PUBLISH` a `subs:{session_id}:{track}` con el JSON de `SubtitleEvent`;
   - `SET run:{session_id}`;
   - `SessionStatus` en `status:{session_id}` con expiración `STATUS_TTL_S`, publicado cada
