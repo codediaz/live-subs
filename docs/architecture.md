@@ -72,8 +72,8 @@ El **Worker** procesa audio y produce eventos. **Redis** desacopla el procesamie
 ## 4. Alcance por prioridad
 | Prioridad | Contenido |
 | ----- | ----- |
-| **P0 — MVP** | Ingesta de archivo y URL; transcripción parcial y final; cierre de frase por VAD ajustado y corte forzado (`MAX_SEGMENT_MS`); traducción de finales EN→ES y ES→EN; vista de audiencia con elección de sesión y pista; últimas `RECENT_FINALS_N` frases finales al conectarse (memoria del gateway); dos sesiones simultáneas; `docker compose`; README |
-| **P1 — Inmediatamente después del MVP** | Reconexión simple ante cierre de sesión Live; glosarios; historial en Redis para clientes que llegan tarde; latencia registrada; panel mínimo (tabla de estado y latencia por sala); exportación SRT/VTT/TXT; overlay OBS; portugués (solo configuración, el traductor es genérico) |
+| **P0 — MVP** | Ingesta de archivo y URL; transcripción parcial y final; cierre de frase por VAD ajustado y corte forzado (`MAX_SEGMENT_MS`); traducción de finales EN→ES y ES→EN; vista de audiencia con elección de sesión y pista; overlay para OBS/vMix (`/overlay.html`); últimas `RECENT_FINALS_N` frases finales al conectarse (memoria del gateway); dos sesiones simultáneas; `docker compose`; README |
+| **P1 — Inmediatamente después del MVP** | Reconexión simple ante cierre de sesión Live; glosarios; historial en Redis para clientes que llegan tarde; latencia registrada; panel mínimo (tabla de estado y latencia por sala); exportación SRT/VTT/TXT; portugués (solo configuración, el traductor es genérico) |
 | **P2 — Si sobra tiempo** | Panel de producción completo (gráficos, alertas); modo bilingüe; idioma de origen `auto`; recarga en caliente de `sessions.yaml`; micrófono; URLs de YouTube vía `yt-dlp`; reanudación de sesión y pre-apertura para reconexión sin huecos |
 | **Fuera de alcance** | Autenticación; almacenamiento permanente; edición colaborativa de subtítulos; entrega garantizada durante caídas de Redis; selección automática de proveedores de IA |
 ---
@@ -251,7 +251,7 @@ Reglas:
 | Método y ruta | Uso |
 | ----- | ----- |
 | `GET /`  | Vista de audiencia |
-| `GET /overlay.html?session=sala1&tracks=es&size=48&position=bottom&partials=true`  | Overlay para OBS/vMix (fondo transparente) |
+| `GET /overlay.html?session=sala1&track=es&size=42&position=bottom&partials=true`  | Overlay para OBS/vMix: fondo transparente, máximo 2 líneas, sin controles. `track` por defecto `original`; `size` en px, por defecto 42; `position` `bottom` o `top`; `partials` `true` o `false`. Se reconecta cada 2 s |
 | `GET /panel.html`  | Panel de producción |
 | `GET /api/sessions`  | Escenarios con nombre, título, idioma de origen y pistas disponibles |
 | `GET /api/sessions/{id}/history?track=es&limit=50`  | Historial reciente de finales de la ejecución actual |
