@@ -347,7 +347,7 @@ traducciones vinculadas a su frase y la vista legible en celular.
   - **Hecho cuando**: con `PSUBSCRIBE 'subs:*'` aparecen eventos `subs:sala1:es` con el `segment_id`
     de un final de `subs:sala1:original` y con `latency_ms`; en `http://localhost:8000/`,
     `sala1` → `es` muestra frases en español.
-- [ ] T032 [US2] Varios escenarios aislados en `src/subs/worker/main.py`:
+- [x] T032 [US2] Varios escenarios aislados en `src/subs/worker/main.py`:
   - un supervisor por escenario de `load_sessions(..., WORKER_SESSIONS)`, **sin** `TaskGroup` común
     (R12);
   - cada supervisor captura su excepción, publica `error` con `last_error` y termina solo su escenario.
@@ -355,7 +355,7 @@ traducciones vinculadas a su frase y la vista legible en celular.
   - **Hecho cuando** (quickstart V4): tras matar el ffmpeg de `charla_es`,
     `curl -s localhost:8000/api/status` muestra `sala2` en `error` y `sala1` en `live`, y la vista de
     `sala1` no se interrumpe.
-- [ ] T033 [US2] Loop y fin de fuente en `src/subs/worker/main.py`:
+- [x] T033 [US2] Loop y fin de fuente en `src/subs/worker/main.py`:
   - con `loop: true` y código de salida 0: se espera `SOURCE_END_GRACE_MS`, se cierra la sesión Live
     y empieza una ejecución nueva (nuevo `run_id`, `ffmpeg` y sesión Live);
   - sin loop: estado `stopped`.
