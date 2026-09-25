@@ -72,9 +72,9 @@ escribir la aplicación. R1 ya está cerrada en el pipeline A.
   - **RF**: RF-033.
   - **Hecho cuando**: `docker pull python:3.12.14-slim-trixie && docker pull redis:8.10.2-alpine`
     termina con código 0. Si falta un tag, se para y se pregunta.
-- [ ] T003 Crear el esqueleto del paquete:
+- [x] T003 Crear el esqueleto del paquete:
   - `pyproject.toml` con las dependencias exactas de `research.md § Dependencias`
-    (`fastapi==0.141.1`, `uvicorn==0.53.0`, `websockets==17.1`, `pydantic==2.13.5`, `redis==8.1.0`,
+    (`fastapi==0.141.1`, `uvicorn==0.53.0`, `websockets==16.1.1`, `pydantic==2.13.5`, `redis==8.1.0`,
     `google-genai==2.25.0`, `PyYAML==6.0.3`) y el extra `[dev]` con `pytest==9.1.1`;
   - paquetes `src/subs/__init__.py`, `src/subs/common/__init__.py`, `src/subs/worker/__init__.py`,
     `src/subs/gateway/__init__.py`;
