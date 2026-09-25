@@ -8,8 +8,8 @@ por defecto del P0 e indica qué servicio recibe cada variable.
 | `GEMINI_API_KEY` | — (obligatoria) | worker | Credencial. **El gateway no la recibe** (RF-031) |
 | `REDIS_URL` | `redis://redis:6379/0` | ambos | Conexión a Redis |
 | `TRANSCRIBE_MODEL` | `gemini-3.5-transcribe-live` | worker | Modelo de transcripción |
-| `TRANSLATE_MODEL` | `gemini-3.8-flash` | worker | Modelo de traducción (T0 puede cambiarlo, R2) |
-| **Δ** `TRANSLATE_THINKING_LEVEL` | `LOW` | worker | Nivel de razonamiento: el mínimo que admite el modelo (R3) |
+| `TRANSLATE_MODEL` | `gemini-3.5-flash-lite` | worker | Modelo de traducción (R2, cerrada en T0; alternativa: `gemini-3.8-flash`) |
+| **Δ** `TRANSLATE_THINKING_LEVEL` | `MINIMAL` | worker | Nivel de razonamiento: el mínimo que admite el modelo (R3; `LOW` si se usa `gemini-3.8-flash`) |
 | **Δ** `TRANSLATE_TIMEOUT_S` | `10` | worker | Límite por llamada de traducción (RF-015) |
 | `TRANSLATION_CONTEXT_SEGMENTS` | `3` | worker | Frases previas como contexto (RF-012) |
 | **Δ** `TRANSLATION_QUEUE_MAX` | `10` | worker | Frases pendientes por pista (RF-014) |
