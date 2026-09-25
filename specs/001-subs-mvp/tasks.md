@@ -396,7 +396,7 @@ traducciones vinculadas a su frase y la vista legible en celular.
 
 **Prueba independiente**: quickstart V1 en una carpeta nueva.
 
-- [ ] T037 [US3] Escribir `README.md` en inglés:
+- [x] T037 [US3] Escribir `README.md` en inglés:
   - qué es;
   - requisitos;
   - quickstart (`cp .env.example .env`, poner `GEMINI_API_KEY`, `docker compose up --build`, abrir
