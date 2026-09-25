@@ -436,7 +436,7 @@ la vista (CE-004), y la sala en español produce frases finales (CE-001, CE-003)
 **Orden**: T045 primero. Después, el **worker** (T046–T050) y el **gateway** (T051–T052) avanzan en
 paralelo: tocan archivos distintos. T053 va al final.
 
-- [ ] T045 Configuración de las variables nuevas (worker y gateway).
+- [x] T045 Configuración de las variables nuevas (worker y gateway).
   - `WorkerSettings` en `src/subs/common/config.py`:
     - `vad_end_sensitivity`: `HIGH` o `LOW`, por defecto `HIGH`;
     - `vad_silence_ms`: por defecto `300`;
