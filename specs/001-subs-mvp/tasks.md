@@ -373,7 +373,7 @@ traducciones vinculadas a su frase y la vista legible en celular.
     - V7: con un `id` repetido, el worker sale con código ≠ 0 y el mensaje nombra escenario y campo;
     - V8: `docker compose exec gateway env | grep -c GEMINI_API_KEY` da `0`;
     - `docker compose logs worker` muestra JSON con `session_id` y sin texto de subtítulos.
-- [ ] T036 [P] [US1] Hacer legible `src/subs/gateway/static/index.html` (R15):
+- [x] T036 [P] [US1] Hacer legible `src/subs/gateway/static/index.html` (R15):
   - tema oscuro con contraste texto/fondo ≥ 4,5:1;
   - sin scroll horizontal desde 360 px;
   - botones A− / A+ con al menos 3 tamaños, guardados en `localStorage` con try/catch.
