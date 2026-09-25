@@ -7,7 +7,7 @@ description: "Lista de tareas de la feature 001-subs-mvp (P0)"
 
 **Entrada**: documentos de diseño en `specs/001-subs-mvp/` ([plan.md](plan.md), [spec.md](spec.md),
 [research.md](research.md), [data-model.md](data-model.md), [contracts/](contracts/),
-[quickstart.md](quickstart.md)). Diseño base: `docs/architecture.md` v0.4.
+[quickstart.md](quickstart.md)). Diseño base: `docs/architecture.md` v0.5.
 
 **Tests**: primero, y solo para funciones puras (constitución, principio 10). La integración se
 verifica con `samples/audio/` y los escenarios V0–V9 de [quickstart.md](quickstart.md). No se usan
@@ -17,6 +17,8 @@ mocks de Gemini para dar por buena una tarea.
 
 - Las fases siguen el orden por valor: T0 → setup → base → hito **"1 escenario"** → hito **"MVP P0"**
   → README y clon limpio → **Entrega**.
+- La corrección de T038 (T045–T053, cambio de alcance del 2026-09-25) va dentro de la Fase 5, entre
+  T038 y T039.
 - Cada tarea dura como máximo 30 min (T0: 60 min) e indica sus RF y una línea **Hecho cuando**.
 
 ## Formato: `[ID] [P?] [Historia?] Descripción`
@@ -419,6 +421,125 @@ traducciones vinculadas a su frase y la vista legible en celular.
   - **Hecho cuando**: desde `git clone` hasta ver subtítulos pasan menos de 10 min, y desde abrir la
     vista hasta leer la pista elegida menos de 30 s. Los tiempos quedan en
     `specs/001-subs-mvp/checklists/validation.md`.
+  - **Resultado (2026-09-25)**: CE-005 OK (3 min 18 s); CE-004 falla (`sala1` → `es` 54,9 s;
+    `sala2` → `en` sin línea en 122 s). Se corrige en T045–T052 y se repite en T053; T038 se marca
+    `[x]` junto con T053.
+
+### Corrección de T038 — cambio de alcance (2026-09-25)
+
+**Objetivo**: toda pista, también las traducidas, muestra una línea en menos de 30 s desde que se abre
+la vista (CE-004), y la sala en español produce frases finales (CE-001, CE-003).
+
+**Base**: RF-045 a RF-048; `research.md` R5, R18, R19 y § Resultados del probe de corte de frase;
+`docs/architecture.md` v0.5 §6.2.1, §6.2.4, §6.3.2, §6.4.2 y §7.7.
+
+**Orden**: T045 primero. Después, el **worker** (T046–T050) y el **gateway** (T051–T052) avanzan en
+paralelo: tocan archivos distintos. T053 va al final.
+
+- [ ] T045 Configuración de las variables nuevas (worker y gateway).
+  - `WorkerSettings` en `src/subs/common/config.py`:
+    - `vad_end_sensitivity`: `HIGH` o `LOW`, por defecto `HIGH`;
+    - `vad_silence_ms`: por defecto `300`;
+    - `max_segment_ms`: por defecto `8000`.
+  - `GatewaySettings`: `recent_finals_n`, por defecto `5`.
+  - `specs/001-subs-mvp/contracts/env.md`:
+    - agregar las 4 variables (Δ) con su servicio;
+    - sacar `MAX_SEGMENT_MS` de la nota de P1.
+  - `.env.example`: `VAD_END_SENSITIVITY`, `VAD_SILENCE_MS`, `MAX_SEGMENT_MS` (ya no comentada) y
+    `RECENT_FINALS_N`.
+  - `docker-compose.yml`: `RECENT_FINALS_N` en `environment` del gateway (el gateway no usa
+    `env_file`).
+  - Tests, primero:
+    - `tests/test_config.py`: valores por defecto, lectura desde el entorno y rechazo de un
+      `VAD_END_SENSITIVITY` inválido;
+    - `tests/test_env_example.py`: `MAX_SEGMENT_MS` deja de ser P1 comentada.
+  - **RF**: RF-030, RF-045, RF-046, RF-048.
+  - **Hecho cuando**: `pytest -q` en verde y `docker compose config` muestra `RECENT_FINALS_N` en el
+    servicio `gateway`, que sigue sin `GEMINI_API_KEY`.
+
+**Worker: corte de frase y prompt del traductor**
+
+- [ ] T046 [P] [US1] Escribir `tests/test_forced_cut.py` antes de la implementación, para la función
+  pura `should_force_cut(*, open_since_ms, last_cut_ms, now_ms, max_segment_ms) -> bool` de
+  `src/subs/worker/transcriber.py`:
+  - sin frase abierta (`open_since_ms` es `None`), no corta;
+  - corta cuando `now_ms - open_since_ms >= max_segment_ms` y no antes;
+  - después de un corte, no vuelve a cortar hasta que pasen otros `max_segment_ms` desde
+    `last_cut_ms`;
+  - una frase nueva (nuevo `open_since_ms`, `last_cut_ms` en `None`) reinicia la cuenta.
+  - **RF**: RF-046.
+  - **Hecho cuando**: `pytest -q tests/test_forced_cut.py` falla solo por la implementación faltante.
+- [ ] T047 [US1] VAD ajustado en `src/subs/worker/transcriber.py`:
+  - `LiveConnectConfig.realtime_input_config` con
+    `AutomaticActivityDetection(disabled=False, end_of_speech_sensitivity=END_SENSITIVITY_<VAD_END_SENSITIVITY>, silence_duration_ms=VAD_SILENCE_MS)`;
+  - los valores llegan desde `WorkerSettings` por `src/subs/worker/main.py`, sin valores fijos.
+  - **RF**: RF-045.
+  - **Hecho cuando**: `pytest -q` en verde y, con el stack arriba, 90 s de
+    `docker compose exec redis redis-cli PSUBSCRIBE 'subs:sala2:original'` muestran al menos 3 eventos
+    con `"is_final":true` (antes: 0 en 75 s).
+- [ ] T048 [US1] Corte forzado en `src/subs/worker/transcriber.py`:
+  - implementar `should_force_cut`;
+  - la frase abierta empieza con el primer parcial y termina con su final (estado del
+    `SegmentTracker`);
+  - la tarea que envía audio consulta la regla después de cada bloque y, si toca, envía
+    `send_realtime_input(audio_stream_end=True)` **sin** pausar el envío de audio;
+  - registrar `forced_cut` con `session_id` (sin texto).
+  - **RF**: RF-046.
+  - **Hecho cuando**: `pytest -q` en verde y, en 90 s de `PSUBSCRIBE 'subs:*'`, `sala1` y `sala2`
+    publican finales en `original`. Mientras hay voz, entre dos finales seguidos de la misma
+    ejecución nunca pasan más de 10 s (según `emitted_at_ms`). `docker compose logs worker` muestra
+    eventos `forced_cut`.
+- [ ] T049 [P] [US1] Actualizar `tests/test_translator_pure.py` antes de la implementación. La
+  instrucción del traductor debe:
+  - decir que el texto puede ser un fragmento de una frase más larga;
+  - pedir que se traduzca como fragmento, sin completarlo ni agregar contenido;
+  - pedir que se apoye en las frases previas, que siguen siendo solo contexto.
+  - **RF**: RF-047.
+  - **Hecho cuando**: `pytest -q tests/test_translator_pure.py` falla solo por la implementación
+    faltante.
+- [ ] T050 [US1] Implementar el cambio del prompt en `src/subs/worker/translator.py`
+  (`system_instruction` / `build_prompt`).
+  - **RF**: RF-047.
+  - **Hecho cuando**: `pytest -q` en verde. En `http://localhost:8000/`, con `sala2` → `en`, 5 líneas
+    seguidas son traducciones de los finales de `subs:sala2:original` y ninguna agrega contenido que
+    no esté en su original (se revisa contra `samples/audio/charla_es.txt`).
+
+**Gateway: últimas frases al conectarse**
+
+- [ ] T051 [P] [US1] Escribir `tests/test_recent_finals.py` antes de la implementación, para la clase
+  pura `RecentFinals` de `src/subs/gateway/main.py`:
+  - guarda como máximo `RECENT_FINALS_N` finales por `(session_id, track)`, en orden de llegada;
+  - ignora parciales;
+  - un evento con `run_id` mayor descarta las finales de la ejecución anterior de esa pista;
+  - con N = 0 no guarda nada;
+  - `snapshot(session_id, track)` devuelve una copia.
+  - **RF**: RF-048.
+  - **Hecho cuando**: `pytest -q tests/test_recent_finals.py` falla solo por la implementación
+    faltante.
+- [ ] T052 [US1] Implementar las últimas frases en `src/subs/gateway/main.py`:
+  - `RecentFinals`;
+  - `EventDistributor` la actualiza con cada evento válido de `subs:*`;
+  - al abrir el WebSocket, en un mismo paso sin `await` en el medio, se registra la cola del cliente
+    y se encolan las finales guardadas de cada pista pedida, antes de cualquier evento en vivo;
+  - actualizar la sección WebSocket de `specs/001-subs-mvp/contracts/gateway-api.md`.
+  - **RF**: RF-048.
+  - **Hecho cuando**: `pytest -q` en verde y, con el stack arriba,
+    `python -m websockets "ws://localhost:8000/ws/sala1?tracks=es"` muestra enseguida hasta 5
+    mensajes `subtitle` con `"is_final":true`, antes del siguiente evento en vivo.
+
+**Validación**
+
+- [ ] T053 [US3] Repetir T038: quickstart V1 desde un clon limpio en una carpeta nueva, siguiendo
+  solo el README y cronometrando.
+  - Requiere que el usuario haya commiteado T045–T052.
+  - El agente no lee la key: copia el archivo `.env` existente.
+  - Cronometrar CE-004 en `sala1` → `es` y en `sala2` → `en`.
+  - **RF**: RF-033, RF-040, RF-045 a RF-048; CE-004, CE-005.
+  - **Hecho cuando**: desde `git clone` hasta ver subtítulos pasan menos de 10 min (CE-005), y desde
+    abrir la vista hasta leer la pista elegida pasan menos de 30 s en las dos pistas traducidas
+    (CE-004). Los tiempos quedan en `specs/001-subs-mvp/checklists/validation.md`, y T038 y T053
+    se marcan `[x]`.
+
 - [ ] T039 [US3] Pasar el quickstart completo (V0–V9) y registrar el resultado de cada escenario y
   cada CE-001 a CE-008 en `specs/001-subs-mvp/checklists/validation.md`.
   - **RF**: todos (validación).
@@ -483,7 +604,7 @@ traducciones vinculadas a su frase y la vista legible en celular.
 | 2 — Base | T003 | Fases 3 y 4 |
 | 3 — Hito "1 escenario" | Fase 2 | Fase 4 |
 | 4 — Hito "MVP P0" | Fase 3 | Fase 5 |
-| 5 — README y clon limpio | Fase 4 | Fase 6 |
+| 5 — README y clon limpio | Fase 4; T045–T053 dependen de T038 (falla de CE-004) | Fase 6 |
 | 6 — Entrega | Fase 5 (T043 necesita T041; T044 necesita T042 y T043) | — |
 
 ### Dentro de cada fase
@@ -495,6 +616,8 @@ traducciones vinculadas a su frase y la vista legible en celular.
 - Traducción y escenarios: T024→T031→T032→T033→(T034, T035).
 - Datos y configuración: T005→T006; T010 + T006 → T015 (`sessions.yaml`) → T016 (imagen, que copia
   `sessions.yaml` y `samples/audio/`).
+- Corrección de T038: T045 → worker (T046→T047→T048 y T049→T050) en paralelo con gateway
+  (T051→T052) → T053 → T039.
 
 ### Historias
 
@@ -502,7 +625,7 @@ traducciones vinculadas a su frase y la vista legible en celular.
   y legibilidad (T036).
 - **US2 (operador)**: depende de US1 hasta T024 (worker de un escenario); agrega varios escenarios,
   loop, stream, validación y secretos (T032–T035).
-- **US3 (evaluador)**: depende de US1 y US2 completas (T037–T039).
+- **US3 (evaluador)**: depende de US1 y US2 completas (T037–T039, con T053 antes de T039).
 
 ---
 
@@ -523,6 +646,11 @@ T017 tests/test_audio_clock.py | T020 tests/test_segment_tracker.py | T023 worke
 # Fase 4:
 T029 tests/test_translator_pure.py | T036 legibilidad de static/index.html
 
+# Fase 5, corrección de T038, después de T045:
+Worker:  T046 tests/test_forced_cut.py → T047 → T048 (transcriber.py)
+         T049 tests/test_translator_pure.py → T050 (translator.py)
+Gateway: T051 tests/test_recent_finals.py → T052 (gateway/main.py)
+
 # Fase 6:
 T041 docs/delivery/video-script.md | T042 docs/delivery/devpost.md
 ```
@@ -538,7 +666,8 @@ T041 docs/delivery/video-script.md | T042 docs/delivery/devpost.md
    Ya es una demo mínima.
 4. **Hito "MVP P0"**: traducción, dos escenarios, loop, aislamiento y legibilidad. Cumple los
    requisitos eliminatorios.
-5. **README + clon limpio**: lo que el jurado va a repetir.
+5. **README + clon limpio**: lo que el jurado va a repetir. Si V1 falla, primero se corrige
+   (T045–T052) y se repite (T053).
 6. **Entrega**: diagrama, guion y Devpost por el agente; video y envío a cargo del usuario.
 
 Si el tiempo aprieta, el orden de recorte es:

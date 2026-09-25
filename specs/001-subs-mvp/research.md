@@ -13,7 +13,7 @@ base es `docs/architecture.md`; acá solo se registra lo que el plan decide, con
 | H1 | `gemini-3.5-transcribe-live` es estable. Emite `server_content.interim_input_transcription` (parciales) e `input_transcription` (finales). Audio PCM 16 bits, 16 kHz, mono, `audio/pcm;rate=16000` | Confirma §6.2 y D1 de la arquitectura |
 | H2 | Las sesiones de transcripción en vivo duran **hasta 10 minutos** | Con loop (RF-043), cada vuelta abre sesión nueva; los clips deben durar < 10 min |
 | H3 | `AudioTranscriptionConfig` acepta `language_codes`, `custom_vocabulary` (hasta 1.000 frases), `mode` (`VERBATIM` / `SMART`) y `word_timestamp`. La Live API documenta tiempos por enunciado, no por palabra; el tipo `Transcription` solo trae `words[].start_offset/end_offset` | Los tiempos reales no están garantizados: se verifican en T0 (R4) |
-| H4 | VAD automático por defecto; VAD híbrido con `audio_stream_end` fuerza la finalización | P0 usa VAD automático; el corte forzado (P1) ya tiene camino documentado |
+| H4 | VAD automático por defecto, configurable con `realtime_input_config.automatic_activity_detection` (`end_of_speech_sensitivity`, `silence_duration_ms`); `audio_stream_end` vacía el audio en caché y fuerza la finalización, y después se puede seguir enviando audio | P0 usa VAD automático ajustado más corte forzado con `audio_stream_end` (R5, medido con `vad_probe.py`) |
 | H5 | `gemini-3.5-live-translate-preview` (preview) solo produce **audio**; el texto llega como `output_transcription`, sin parciales, con **un idioma destino por sesión** | Pipeline B no da parciales del original (incumple RF-006) y cuesta una sesión de audio por idioma: se descarta sin probarlo (R1) |
 | H6 | *Thinking* en Gemini 3.x se controla con `thinking_level` (`ThinkingConfig`). `gemini-3.8-flash`: mínimo `LOW` (por defecto `MEDIUM`). `gemini-3.5-flash-lite`: admite `MINIMAL` (por defecto). No hay valor "apagado"; `thinking_budget` no se usa desde 3.5 | Define la configuración del traductor (R3) |
 | H7 | Modelos estables vigentes: `gemini-3.8-flash`, `gemini-3.5-flash-lite`, `gemini-3.5-transcribe-live`, `gemini-3.8-flash-tts` | Los IDs exactos de `AGENTS.md` existen; nada de alias `-latest`. El modelo TTS genera los clips del repo (R17) |
@@ -78,12 +78,23 @@ técnica.
 - **Descartada**: la aproximación literal de §8 (posición al recibir el primer parcial y el final),
   porque subestima la latencia del modelo.
 
-### R5. Detección de voz: VAD automático del servidor
+### R5. Detección de voz: VAD automático del servidor, ajustado, con corte forzado — **actualizada 2026-09-25**
 
-- **Decisión**: VAD automático (valor por defecto); modo `VERBATIM`.
-- **Motivo**: es lo más simple que cumple RF-006 y RF-007.
-- **Descartadas**: VAD híbrido o manual, que se evalúan con el corte forzado (P1). También `SMART`:
-  agrega formato de párrafos y listas que no sirve para subtítulos y es incompatible con tiempos (H3).
+- **Decisión**: VAD automático con `END_SENSITIVITY_HIGH` (`VAD_END_SENSITIVITY`) y
+  `silence_duration_ms=300` (`VAD_SILENCE_MS`); modo `VERBATIM`. Además, si una frase sigue abierta
+  `MAX_SEGMENT_MS=8000` desde su primer parcial, se envía `audio_stream_end` sin cortar el envío de
+  audio, y se repite si sigue abierta otros 8 s (variante d del probe).
+- **Motivo**: con la configuración por defecto, la sala en español dio 1 final en 90 s y T038 falló
+  (CE-004). La variante d es la que mejor combina espera máxima (9,4 s) y frases con puntuación de
+  cierre (6 de 12). Ver § Resultados del probe de corte de frase.
+- **Descartadas**:
+  - VAD por defecto (variante a): 1 final en 90 s;
+  - solo VAD ajustado (b): frases reales, pero hasta 62 s sin final;
+  - `audio_stream_end` fijo cada 6 s (c): corta casi todas las frases a la mitad (4 de 14 con
+    puntuación de cierre);
+  - VAD manual (`activity_start` / `activity_end`) con detección propia: más código y más riesgo;
+  - `SMART`: agrega formato de párrafos y listas que no sirve para subtítulos y es incompatible con
+    tiempos (H3).
 - **Opcional en T0**: si sobra tiempo dentro de los 60 min, se compara `SMART` con `VERBATIM` sobre
   las mismas 10 frases. Solo se pasa a `SMART` si mejora la calidad y T0 confirma que los tiempos de R4
   no dependen de los offsets de la Live API.
@@ -196,6 +207,31 @@ técnica.
   - subir la charla real al repo: la licencia de redistribución no está clara;
   - grabar los clips a mano: lleva más tiempo y el resultado es menos reproducible.
 
+### R18. Últimas frases al conectarse: memoria del gateway — **2026-09-25**
+
+- **Decisión**: el gateway guarda las últimas `RECENT_FINALS_N=5` frases finales de la ejecución
+  actual por `(session_id, track)` en memoria. Las toma de la misma suscripción `subs:*` (R8) y las
+  envía como mensajes `subtitle` al abrir el WebSocket, antes de los eventos en vivo. El cliente ya
+  fusiona por clave y `revision` (R13), así que no hay que cambiar la vista.
+- **Motivo**: RF-048 y CE-004. Una pista traducida solo recibe finales; sin estas frases, quien abre
+  la vista espera a la próxima frase final.
+- **Descartadas**:
+  - historial en Redis (`hist:*`) con endpoint HTTP y fusión en el cliente: es P1 (§6.4.2) y suma
+    escritura en el worker, una ruta nueva y cambios en la vista;
+  - no guardar nada: incumple CE-004 cuando la pista no tiene una frase en curso.
+- **Límite**: el buffer es acotado (principio 7). Cada gateway tiene su propia memoria; un gateway
+  que recién arranca empieza vacío.
+
+### R19. Traducción de fragmentos — **2026-09-25**
+
+- **Decisión**: el prompt del traductor indica que el texto puede ser un fragmento de una frase más
+  larga y pide traducirlo como fragmento, sin completarlo, apoyándose en las frases previas de
+  contexto (RF-047).
+- **Motivo**: el corte forzado (R5) cierra frases a la mitad. Sin la indicación, el modelo tiende a
+  completarlas o a cerrarlas con punto.
+- **Descartada**: unir el fragmento con el siguiente antes de traducir. Agrega espera y contradice
+  el objetivo del corte.
+
 ## Dependencias (versiones fijadas)
 
 Principio 13: cada dependencia tiene un motivo. Todas son directas y van fijadas con `==`.
@@ -244,7 +280,8 @@ un bloque de 100 ms se calcula con la biblioteca estándar).
   - que dos sesiones Live simultáneas funcionan con la cuota de la key.
 - **Opcional, si sobra tiempo**: `SMART` frente a `VERBATIM` sobre las mismas 10 frases (R5).
 - **Fuera de T0**: la verificación de `audio_stream_end` para forzar el final pasa a P1, junto con el
-  corte forzado.
+  corte forzado. *(2026-09-25: se verificó con `scripts/t0/vad_probe.py`, ver § Resultados del probe
+  de corte de frase.)*
 - **Salida**: tabla de resultados y decisión aplicada a R2 y R4 (y a R5 si se hizo la comparación
   opcional). Los datos crudos quedan en `scripts/t0/out/` (ignorado por git).
 
@@ -305,7 +342,48 @@ Cada una llevó como contexto el título y las 3 frases anteriores.
 
 ### Consecuencia para P1
 
+*(2026-09-25: el corte forzado pasó a P0 por la falla de T038; ver § Resultados del probe de corte
+de frase.)*
+
 **El corte forzado (`MAX_SEGMENT_MS`, §6.2.4) es la primera prioridad de P1.** Con este tipo de
 speaker hay pocas frases finales y muy largas (hasta 67 palabras y ~30 s). La traducción, que solo
 procesa finales, llega tarde para la audiencia aunque su latencia desde el fin de la frase sea baja.
 La verificación de `audio_stream_end` a mitad de frase (§14, punto 3) va junto con esa tarea.
+
+## Resultados del probe de corte de frase
+
+**Motivo**: T038 falló en CE-004 (`checklists/validation.md`). En 75 s, `sala2` publicó 133 parciales
+y 0 finales, así que su pista `en` no mostraba nada. `sala1` publicaba un final cada ~20–25 s.
+
+**Ejecución**: 2026-09-25, `scripts/t0/vad_probe.py` (descartable, como T0).
+
+- **Entrada**: los primeros 90 s de `samples/audio/charla_es.ogg`, a ritmo real, bloques de 100 ms,
+  seguidos de 2 s de silencio.
+- **Método**: una sesión Live por variante, una después de otra, con `gemini-3.5-transcribe-live`,
+  `language_codes=[es]` y `VERBATIM`.
+- **Datos crudos**: `scripts/t0/out/vad_20260924-233936_*` (a, b, c) y
+  `scripts/t0/out/vad_20260924-234935_*` (d). La corrida `vad_20260924-233926_*` falló por
+  configuración local (`\r` en el nombre del modelo) y no cuenta.
+- **Nombres de parámetros**: verificados en la guía oficial de la Live API y en los tipos de
+  `google-genai==2.25.0`:
+  - `LiveConnectConfig.realtime_input_config`;
+  - `RealtimeInputConfig.automatic_activity_detection`;
+  - `AutomaticActivityDetection.end_of_speech_sensitivity` (`EndSensitivity.END_SENSITIVITY_HIGH`);
+  - `AutomaticActivityDetection.silence_duration_ms`;
+  - `AsyncSession.send_realtime_input(audio_stream_end=True)`.
+
+| Variante | Finales | Finales/min | Duración media de la frase | Palabras/final | Espera máxima entre finales | Finales con `.?!` | `audio_stream_end` enviados |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| (a) configuración actual (VAD por defecto) | 1 | 0,67 | 91,2 s | 218 | 92,0 s | 0 / 1 | 0 |
+| (b) `END_SENSITIVITY_HIGH`, `silence_duration_ms=300` | 5 | 3,33 | 17,5 s | 43 | 61,9 s | 4 / 5 | 0 |
+| (c) actual + `audio_stream_end` cada 6 s | 14 | 9,33 | 6,0 s | 15,1 | 12,2 s | 4 / 14 | 15 |
+| **(d) b + `audio_stream_end` si la frase abierta supera 8 s** | 12 | 8,0 | 6,9 s | 17,8 | **9,4 s** | **6 / 12** | 7 |
+
+- **Duración de la frase**: tiempo desde el primer parcial de la frase hasta su final. **Espera
+  máxima**: mayor intervalo entre el inicio del envío y un final, o entre dos finales seguidos.
+- **`audio_stream_end` a mitad de frase**: fuerza el final y la sesión sigue aceptando audio en la
+  misma conexión (c y d, sin errores). Cierra el punto 3 de §14 de la arquitectura.
+- **Conclusión**: se adopta d (R5). En d, 5 finales los cerró el VAD y 7 el corte. Los 6 finales sin
+  puntuación de cierre son fragmentos cortados, por eso el traductor los trata como fragmentos (R19).
+- **Límite de la muestra**: un clip TTS en español y 90 s por variante. Cada variante recibe el
+  mismo audio, pero en una sesión distinta.
