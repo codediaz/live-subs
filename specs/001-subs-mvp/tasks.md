@@ -83,7 +83,7 @@ escribir la aplicación. R1 ya está cerrada en el pipeline A.
   - **RF**: —.
   - **Hecho cuando**: `pip install -e ".[dev]"` termina sin error y
     `python -c "import subs.common, subs.worker, subs.gateway"` no falla.
-- [ ] T004 [P] Crear `.env.example` con todas las variables de `contracts/env.md` y sus valores por
+- [x] T004 [P] Crear `.env.example` con todas las variables de `contracts/env.md` y sus valores por
   defecto. Las P1 (`MAX_SEGMENT_MS`, `HISTORY_*`) van comentadas y `GEMINI_API_KEY` queda vacía.
   `TRANSLATE_MODEL` y `TRANSLATE_THINKING_LEVEL` toman la decisión de T001 (R2).
   - **RF**: RF-030.
