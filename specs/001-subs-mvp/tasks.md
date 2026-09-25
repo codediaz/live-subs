@@ -367,7 +367,7 @@ traducciones vinculadas a su frase y la vista legible en celular.
   - **RF**: RF-002, RF-025.
   - **Hecho cuando** (quickstart V5): con `SESSIONS_FILE=sessions.stream.yaml`, ese escenario produce
     subtítulos en vivo; con una URL inaccesible queda en `error` y los demás siguen.
-- [ ] T035 [US2] Verificar la configuración inválida y los secretos, y corregir lo que falle.
+- [x] T035 [US2] Verificar la configuración inválida y los secretos, y corregir lo que falle.
   - **RF**: RF-029, RF-031, RF-034.
   - **Hecho cuando**:
     - V7: con un `id` repetido, el worker sale con código ≠ 0 y el mensaje nombra escenario y campo;
