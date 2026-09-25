@@ -2,6 +2,10 @@
 
 Live Subs provides real-time subtitles and translation for multiple conference stages. An audience member selects a stage and a subtitle track in a browser; original speech appears as partial and final subtitles, while translations are published for final sentences.
 
+## Demo
+
+Video: _link coming soon_. The video shows a real Nerdearla talk, two stages running in parallel, the English and Spanish translations, and the audience page on a phone.
+
 ## Requirements
 
 - Docker with the Compose plugin.
@@ -29,6 +33,20 @@ Open <http://localhost:8000/>. The default `sessions.yaml` starts two looping sa
 
 The worker reads each stage's file or stream through ffmpeg, sends continuous PCM audio to Gemini Live for transcription, and translates final sentences with Gemini Flash. It publishes subtitle events through Redis. The FastAPI gateway serves the audience page and delivers the selected stage and track over WebSocket. See the [detailed architecture](docs/architecture.md) for design and data-flow details.
 
+The diagram shows the full design. This MVP includes the audience page; the OBS overlay, the production panel, subtitle history and SRT/VTT/TXT export are planned next.
+
+## Results
+
+Measured on this MVP. Details in [research.md](specs/001-subs-mvp/research.md) and [validation.md](specs/001-subs-mvp/checklists/validation.md).
+
+| Metric | Result | How it was measured |
+| --- | --- | --- |
+| Partial subtitle | ~1 s (P50) | From the start of speech to the first partial; technical probe with a real Nerdearla talk in English |
+| Final sentence | ~1.75 s (P50) | From the end of speech to the final sentence; same probe |
+| Translation | ~2.4 s (P50) | From the end of speech to the translated sentence: final plus the `gemini-3.5-flash-lite` call |
+| First translated line after opening the page | < 1 s (was 54.9 s) | Headless browser on both translated tracks, from a clean clone |
+| Clean clone to subtitles | 34 s to 3 min 18 s | `git clone` to the first subtitle: 34 s with Docker's build cache, 3 min 18 s when the image is built |
+
 ## Configuration
 
 The worker reads its settings from `.env`. These model settings are provided in `.env.example`; edit them in `.env` before starting the stack:
@@ -48,6 +66,10 @@ Edit [`sessions.yaml`](sessions.yaml) to add or change stages. Each session has 
 A stage is the unit of scale: each stage has its own audio stream and Live transcription session. With an empty `WORKER_SESSIONS` value, the worker serves every stage in `sessions.yaml`. To grow from the two sample stages to 100, add the stage definitions and run, for example, 10 workers with 10 distinct stage IDs assigned to each via its comma-separated `WORKER_SESSIONS` value. Point all workers at the same Redis instance. Gateways are separate from audio processing; run multiple gateway instances behind a load balancer as audience traffic grows.
 
 Each additional target language adds one text translation call per final sentence, rather than another audio session. Capacity and cost depend on your Gemini project's concurrent-session and token quotas; check those limits before scaling.
+
+## How it was built
+
+Live Subs was built with Spec-Driven Development using [Spec Kit](https://github.com/github/spec-kit): a project constitution, then a spec, a plan and a task list, each written before the code. Claude Code and Codex implemented the tasks one at a time, each with a test or a runnable "done when" check. The specification, plan, research, contracts and validation results are in [`specs/001-subs-mvp/`](specs/001-subs-mvp/).
 
 ## Sample audio and license
 
