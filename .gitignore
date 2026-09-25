@@ -220,3 +220,5 @@ __marimo__/
 # Live Subs: local-only audio (not redistributable) and T0 raw output
 samples/local/
 scripts/t0/out/
+docker-compose.override.yml
+sessions.local.yaml
