@@ -4,7 +4,7 @@ Live Subs provides real-time subtitles and translation for multiple conference s
 
 ## Demo
 
-Video: _link coming soon_. The video shows a real Nerdearla talk, two stages running in parallel, the English and Spanish translations, and the audience page on a phone.
+Video: _link coming soon_. The video shows a real Nerdearla talk, two stages running in parallel, the English and Spanish translations, the audience page on a phone, and the OBS overlay over the talk video.
 
 ## Requirements
 
@@ -27,13 +27,31 @@ docker compose up --build
 
 Open <http://localhost:8000/>. The default `sessions.yaml` starts two looping sample talks: `sala1` (English with Spanish translation) and `sala2` (Spanish with English translation). Select a stage and its original or translated track in the audience page.
 
+## OBS / vMix overlay
+
+To burn subtitles into a livestream, add a Browser Source in OBS (or a Web Browser input in vMix) with, for example:
+
+```text
+http://localhost:8000/overlay.html?session=sala2&track=en
+```
+
+| Parameter | Default | Values |
+| --- | --- | --- |
+| `session` | — (required) | A stage `id` from `sessions.yaml` |
+| `track` | `original` | `original` or a target language of that stage, such as `es` or `en` |
+| `size` | `42` | Font size in px, from 12 to 200 |
+| `position` | `bottom` | `bottom` or `top` |
+| `partials` | `true` | `false` shows only final sentences |
+
+The background is transparent and there are no controls: the overlay shows up to two lines of white text with a dark outline. It reconnects every 2 seconds if the connection drops. A 1920×1080 source placed over the talk video works well.
+
 ## Architecture
 
 ![Live Subs solution architecture](docs/architecture.svg)
 
 The worker reads each stage's file or stream through ffmpeg, sends continuous PCM audio to Gemini Live for transcription, and translates final sentences with Gemini Flash. It publishes subtitle events through Redis. The FastAPI gateway serves the audience page and delivers the selected stage and track over WebSocket. See the [detailed architecture](docs/architecture.md) for design and data-flow details.
 
-The diagram shows the full design. This MVP includes the audience page; the OBS overlay, the production panel, subtitle history and SRT/VTT/TXT export are planned next.
+The diagram shows the full design. This MVP includes the audience page and the OBS/vMix overlay; the production panel, subtitle history and SRT/VTT/TXT export are planned next.
 
 ## Results
 
