@@ -4,7 +4,7 @@ Live Subs provides real-time subtitles and translation for multiple conference s
 
 ## Demo
 
-Video: _link coming soon_. The video shows a real Nerdearla talk, two stages running in parallel, the English and Spanish translations, the audience page on a phone, and the OBS overlay over the talk video.
+Video: [Watch the demo](https://youtu.be/G8bLmZ4n4MU). The video shows a real Nerdearla talk, two stages running in parallel, the English and Spanish translations, the audience page on a phone, and the OBS overlay over the talk video.
 
 ## Requirements
 
