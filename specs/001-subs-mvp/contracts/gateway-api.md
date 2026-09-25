@@ -9,7 +9,8 @@ Base: `docs/architecture.md` §7.6. El P0 implementa solo estas rutas:
 | `GET /api/status` | Sí | `SessionStatus` de cada escenario (lo que haya en `status:*`). Si expiró, el escenario sale como `null` |
 | `GET /healthz` | Sí | 200 si el gateway responde y Redis contesta `PING`; 503 si no |
 | `WS /ws/{session_id}?tracks=original,es` | Sí | Eventos en vivo de las pistas pedidas |
-| `GET /overlay.html`, `/panel.html`, `/api/sessions/{id}/history`, `/runs`, `/export` | No | P1 |
+| `GET /overlay.html?session=sala2&track=en&size=42&position=bottom&partials=true` | Sí | Overlay para OBS/vMix (RF-049): fondo transparente, máximo 2 líneas, sin controles. `size` en px (por defecto 42), `position` `bottom` o `top`, `partials` `true` o `false`. Usa el mismo WebSocket y se reconecta cada 2 s |
+| `GET /panel.html`, `/api/sessions/{id}/history`, `/runs`, `/export` | No | P1 |
 
 ## WebSocket
 
