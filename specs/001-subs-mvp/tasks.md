@@ -89,7 +89,7 @@ escribir la aplicación. R1 ya está cerrada en el pipeline A.
   - **RF**: RF-030.
   - **Hecho cuando**: cada variable de `contracts/env.md` aparece en `.env.example`, sin ningún
     valor de credencial (se revisa con `grep`).
-- [ ] T005 [P] Escribir los guiones de TC:
+- [x] T005 [P] Escribir los guiones de TC:
   - `samples/audio/charla_en.txt` y `samples/audio/charla_es.txt`;
   - cada uno de 300–450 palabras, en tono de charla técnica;
   - con jerga: Kubernetes, pull request, deployment, observability, open source, CI/CD, entre otras.

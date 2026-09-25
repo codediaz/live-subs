@@ -1,0 +1,9 @@
+Good afternoon, everyone. I want to tell you about a deployment that looked perfect on our dashboard and still broke the checkout button. We had just moved a small payments service onto Kubernetes. The pods were healthy, CPU was low, and our CI/CD pipeline had marked the release green. Five minutes later, support showed us a screenshot: customers could browse, but nobody could finish an order.
+
+Our first instinct was to roll back. That was sensible, but we also wanted to understand what our checks had missed. We followed one request from the browser through the API gateway and into the payment service. The trace stopped at a call to a feature flag provider. That call did not fail. It waited, then returned a default value that hid the button. Our health check never exercised that path, so Kubernetes had no reason to restart the pods.
+
+The useful lesson was about observability. A green deployment tells us that a process started; it does not tell us that a person can complete a task. We added a synthetic checkout probe using a test account, and we put its result beside error rate and request latency. We also gave the feature flag call a timeout and made the fallback explicit. During the next incident, the on-call engineer could see the failing step without reading every log line.
+
+We changed our review habits as well. A pull request now includes a short note about what a user might notice, plus the signal we will watch after release. That note is small enough to write during normal development. It caught a missing metric last week, before the code reached production.
+
+None of this requires a huge platform team. The probe is a tiny script, the dashboard is simple, and the runbook lives in our open source repository. Start with one critical journey and ask what success looks like from outside your service. Then make that journey visible. Your next green deployment will mean a little more, and your next rollback will take a little less guesswork.
