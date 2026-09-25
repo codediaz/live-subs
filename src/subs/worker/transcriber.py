@@ -1,7 +1,29 @@
 """Live transcription: turn Live API partials and finals into original-track SubtitleEvents."""
 
+import asyncio
+import contextlib
+import logging
+import time
+from collections.abc import Awaitable, Callable
+
+from google import genai
+from google.genai import types
+
+from subs.common.queues import DropOldestQueue
 from subs.common.schema import ORIGINAL_TRACK, SubtitleEvent
-from subs.worker.ingest import AudioClock
+from subs.worker.ingest import PCM_SAMPLE_RATE, AudioClock
+
+_LOGGER = logging.getLogger(__name__)
+_AUDIO_MIME_TYPE = f"audio/pcm;rate={PCM_SAMPLE_RATE}"
+_QUEUE_POLL_S = 0.2
+
+
+def now_ms() -> int:
+    return time.time_ns() // 1_000_000
+
+
+class LiveSessionClosed(RuntimeError):
+    """The Live API closed the session while audio was still being sent."""
 
 
 class SegmentTracker:
@@ -102,3 +124,81 @@ class SegmentTracker:
             emitted_at_ms=now_ms,
             latency_ms=latency_ms,
         )
+
+
+async def transcribe(
+    client: genai.Client,
+    *,
+    model: str,
+    source_language: str,
+    session_id: str,
+    audio_queue: DropOldestQueue[bytes],
+    source_done: asyncio.Event,
+    clock: AudioClock,
+    tracker: SegmentTracker,
+    on_event: Callable[[SubtitleEvent], Awaitable[None]],
+    end_grace_ms: int,
+) -> None:
+    """Stream the audio queue to one Live session and hand every subtitle event to on_event.
+
+    Audio goes only through the Live API as a continuous stream (constitution, principle 2).
+    Returns after the source ends and the queue is drained, waiting up to end_grace_ms for the
+    last final. Any session error propagates to the caller (the scenario supervisor).
+    """
+    config = types.LiveConnectConfig(
+        response_modalities=[types.Modality.TEXT],
+        input_audio_transcription=types.AudioTranscriptionConfig(
+            language_codes=[source_language],
+            mode=types.AudioTranscriptionConfigMode.VERBATIM,  # research.md R5
+        ),
+    )
+    async with client.aio.live.connect(model=model, config=config) as session:
+        _LOGGER.info("live_session_open", extra={"session_id": session_id, "model": model})
+
+        async def send() -> None:
+            while not (source_done.is_set() and audio_queue.empty()):
+                try:
+                    chunk = await asyncio.wait_for(audio_queue.get(), timeout=_QUEUE_POLL_S)
+                except TimeoutError:
+                    continue
+                clock.record(chunk, sent_at_ms=now_ms())
+                await session.send_realtime_input(audio=types.Blob(data=chunk, mime_type=_AUDIO_MIME_TYPE))
+
+        async def receive() -> None:
+            while True:
+                received = False
+                async for message in session.receive():
+                    received = True
+                    content = message.server_content
+                    if content is None:
+                        continue
+                    if content.interim_input_transcription and content.interim_input_transcription.text:
+                        event = tracker.on_interim(content.interim_input_transcription.text, now_ms=now_ms())
+                        if event is not None:
+                            await on_event(event)
+                    if content.input_transcription and content.input_transcription.text:
+                        event = tracker.on_final(content.input_transcription.text, now_ms=now_ms())
+                        if event is not None:
+                            await on_event(event)
+                if not received:
+                    raise LiveSessionClosed("Live API closed the transcription session")
+
+        sender = asyncio.create_task(send())
+        receiver = asyncio.create_task(receive())
+        try:
+            done, _ = await asyncio.wait({sender, receiver}, return_when=asyncio.FIRST_COMPLETED)
+            if receiver in done:
+                receiver.result()  # re-raises the session error
+                raise LiveSessionClosed("Live API closed the transcription session")
+            sender.result()
+            # Source ended: give the Live API a moment to finalize the last sentence.
+            done, _ = await asyncio.wait({receiver}, timeout=end_grace_ms / 1000)
+            if receiver in done:
+                receiver.result()
+        finally:
+            for task in (sender, receiver):
+                task.cancel()
+            for task in (sender, receiver):
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+        _LOGGER.info("live_session_closed", extra={"session_id": session_id})
