@@ -180,6 +180,10 @@ Formato EARS: *El sistema deberá…* (siempre), *Cuando…* (evento), *Mientras
   configurable, entonces el sistema deberá forzar su cierre como final sin interrumpir el envío de
   audio; si después del cierre forzado sigue sin final durante otra duración máxima, deberá forzarlo
   otra vez.
+- **RF-050 (P1)**: El worker deberá leer `TRANSCRIBE_VOCABULARY` como términos separados por comas
+  (por defecto `Nerdearla,Konex,Kubernetes,Gemini,open source`), enviarlos como vocabulario
+  personalizado a la transcripción Live e indicar al traductor que los preserve sin traducir como
+  nombres propios o jerga técnica.
 
 **Traducción**
 
