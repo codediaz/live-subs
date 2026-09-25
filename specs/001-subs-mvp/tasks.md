@@ -95,7 +95,7 @@ escribir la aplicación. R1 ya está cerrada en el pipeline A.
   - con jerga: Kubernetes, pull request, deployment, observability, open source, CI/CD, entre otras.
   - **RF**: RF-040.
   - **Hecho cuando**: `wc -w samples/audio/charla_*.txt` da entre 300 y 450 palabras en cada uno.
-- [ ] T006 TC: crear `scripts/make_clips.py`, generar los clips y documentarlos.
+- [x] T006 TC: crear `scripts/make_clips.py`, generar los clips y documentarlos.
   - El script lee cada guion, genera el audio con `gemini-3.8-flash-tts` (una voz por idioma) y lo
     convierte con ffmpeg a `samples/audio/charla_en.ogg` y `samples/audio/charla_es.ogg` (Opus mono).
   - Si el guion es largo, lo genera por párrafos y los concatena.
