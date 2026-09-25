@@ -226,7 +226,7 @@ elegir `sala1` → `original` y ver parciales y finales (quickstart V2, paso 1).
   - **Hecho cuando**:
     `docker compose run --rm worker python -m subs.worker.ingest samples/audio/charla_en.ogg --seconds 5`
     imprime unos 50 bloques y tarda unos 5 s (ritmo real).
-- [ ] T020 [P] [US1] Escribir `tests/test_segment_tracker.py` antes de la implementación (máquina de
+- [x] T020 [P] [US1] Escribir `tests/test_segment_tracker.py` antes de la implementación (máquina de
   `data-model.md` §5):
   - parciales con `revision` creciente en la misma frase;
   - un final con `revision` mayor que cualquier parcial de su frase;
@@ -237,7 +237,7 @@ elegir `sala1` → `original` y ver parciales y finales (quickstart V2, paso 1).
   - `start_ms`, `end_ms` y `latency_ms` salen de `AudioClock`.
   - **RF**: RF-006, RF-007, RF-037.
   - **Hecho cuando**: `pytest -q tests/test_segment_tracker.py` falla solo por la implementación faltante.
-- [ ] T021 [US1] Implementar `SegmentTracker` en `src/subs/worker/transcriber.py`.
+- [x] T021 [US1] Implementar `SegmentTracker` en `src/subs/worker/transcriber.py`.
   - **RF**: RF-006, RF-007, RF-037, RF-038.
   - **Hecho cuando**: `pytest -q` en verde.
 - [ ] T022 [US1] Implementar la sesión Live en `src/subs/worker/transcriber.py`:
