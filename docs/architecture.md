@@ -5,8 +5,8 @@
 | ----- | ----- |
 | Documento | Software Design Description (`docs/architecture.md`) |
 | Sistema | Live Subs |
-| Versión | 0.4 — diseño del MVP para la Nerdearla Vibeathon 2026, alineado con `specs/001-subs-mvp/` |
-| Fecha | 24 de septiembre de 2026 |
+| Versión | 0.5 — diseño del MVP para la Nerdearla Vibeathon 2026, alineado con `specs/001-subs-mvp/`. Pasan a P0 el corte de frase y las últimas frases al conectarse (falla de T038) |
+| Fecha | 25 de septiembre de 2026 |
 | Estado | Aprobado para implementación. Pendientes explícitos en §14 |
 | Licencia | Apache 2.0 |
 ---
@@ -72,8 +72,8 @@ El **Worker** procesa audio y produce eventos. **Redis** desacopla el procesamie
 ## 4. Alcance por prioridad
 | Prioridad | Contenido |
 | ----- | ----- |
-| **P0 — MVP** | Ingesta de archivo y URL; transcripción parcial y final; traducción de finales EN→ES y ES→EN; vista de audiencia con elección de sesión y pista; dos sesiones simultáneas; `docker compose`; README |
-| **P1 — Inmediatamente después del MVP** | Reconexión simple ante cierre de sesión Live; glosarios; corte forzado de frase (`MAX_SEGMENT_MS`); historial para clientes que llegan tarde; latencia registrada; panel mínimo (tabla de estado y latencia por sala); exportación SRT/VTT/TXT; overlay OBS; portugués (solo configuración, el traductor es genérico) |
+| **P0 — MVP** | Ingesta de archivo y URL; transcripción parcial y final; cierre de frase por VAD ajustado y corte forzado (`MAX_SEGMENT_MS`); traducción de finales EN→ES y ES→EN; vista de audiencia con elección de sesión y pista; últimas `RECENT_FINALS_N` frases finales al conectarse (memoria del gateway); dos sesiones simultáneas; `docker compose`; README |
+| **P1 — Inmediatamente después del MVP** | Reconexión simple ante cierre de sesión Live; glosarios; historial en Redis para clientes que llegan tarde; latencia registrada; panel mínimo (tabla de estado y latencia por sala); exportación SRT/VTT/TXT; overlay OBS; portugués (solo configuración, el traductor es genérico) |
 | **P2 — Si sobra tiempo** | Panel de producción completo (gráficos, alertas); modo bilingüe; idioma de origen `auto`; recarga en caliente de `sessions.yaml`; micrófono; URLs de YouTube vía `yt-dlp`; reanudación de sesión y pre-apertura para reconexión sin huecos |
 | **Fuera de alcance** | Autenticación; almacenamiento permanente; edición colaborativa de subtítulos; entrega garantizada durante caídas de Redis; selección automática de proveedores de IA |
 ---
@@ -91,7 +91,7 @@ El **Worker** procesa audio y produce eventos. **Redis** desacopla el procesamie
 | Colas | `common/queues.py`  | Cola acotada que, al llenarse, descarta el elemento más antiguo y cuenta el descarte. La usan la ingesta, el traductor y el gateway | Elementos | Elementos + descartes |
 | Logs | `common/logs.py`  | Formato JSON con `session_id`; en `INFO`, sin audio ni texto | Registros | Salida estándar |
 | Redis | servicio | Pub/sub, historial por pista y estado por sesión | Eventos | Eventos, historial, estado |
-| Gateway | `gateway/main.py`  | WebSocket, API de sesiones, historial, exportación, estado; servir páginas | Redis, `sessions.yaml`  | WebSocket y HTTP |
+| Gateway | `gateway/main.py`  | WebSocket, API de sesiones, últimas finales por pista en memoria, historial, exportación, estado; servir páginas | Redis, `sessions.yaml`  | WebSocket y HTTP |
 | Clientes | `gateway/static/`  | Audiencia, overlay y panel | Gateway | Vistas |
 ---
 
@@ -104,20 +104,20 @@ El **Worker** procesa audio y produce eventos. **Redis** desacopla el procesamie
 5. La ingesta mantiene un **reloj de audio**: por cada bloque enviado registra su posición en la charla (ms) y la hora real de envío. Ese reloj alimenta `start_ms` , `end_ms`  y la medición de latencia (§8).
 6. Entre la ingesta y el Transcriptor hay una cola acotada. La ingesta nunca se detiene: si la cola se llena, se descartan los bloques más antiguos y se registra el descarte. Durante una reconexión los bloques también se descartan y el reloj de audio sigue avanzando. Así el retraso nunca se acumula.
 ### 6.2 Transcripción
-1. El Transcriptor abre una sesión Live con `TRANSCRIBE_MODEL` , idioma de origen y vocabulario del glosario.
+1. El Transcriptor abre una sesión Live con `TRANSCRIBE_MODEL` , idioma de origen y vocabulario del glosario. La detección de actividad es automática, con `end_of_speech_sensitivity` = `VAD_END_SENSITIVITY` y `silence_duration_ms` = `VAD_SILENCE_MS` (`realtime_input_config.automatic_activity_detection`).
 2. Cada hipótesis parcial (`interim_input_transcription` ) se publica como evento `original`  con `is_final=false`  y `revision`  creciente para el mismo `segment_id` .
 3. Cada transcripción final (`input_transcription` ) se publica como evento `original`  con `is_final=true`  y se entrega al Traductor. El siguiente parcial abre un nuevo `segment_id` .
-4. **Corte forzado (P1):** si una frase supera `MAX_SEGMENT_MS`  sin final, el Transcriptor envía una señal de fin de audio (`audio_stream_end` ) para forzar la finalización y sigue enviando audio. Evita que la traducción se atrase cuando el speaker no hace pausas.
+4. **Corte forzado (P0):** una frase está abierta desde su primer parcial hasta su final. Si sigue abierta `MAX_SEGMENT_MS`  sin final, el Transcriptor envía una señal de fin de audio (`audio_stream_end` ) para forzar la finalización y sigue enviando audio, sin pausa. Si la frase sigue abierta otros `MAX_SEGMENT_MS`  después del corte, lo repite. Evita que la traducción se atrase cuando el speaker no hace pausas.
 5. **Reconexión (P1):** si la conexión se cierra (las conexiones de la Live API duran unos 10 minutos), el Transcriptor abre una nueva sesión y continúa. Se acepta un hueco breve. `sequence`  y `segment_id`  continúan su numeración: una reconexión no los reinicia. Un parcial abierto al momento del corte se descarta. Reanudación de sesión y pre-apertura quedan para P2.
 ### 6.3 Traducción
 1. El Traductor recibe cada frase final y, por cada idioma de `target_languages`  distinto del idioma de la frase, llama a `TRANSLATE_MODEL` .
-2. El prompt incluye: la frase, el título de la charla, las últimas `TRANSLATION_CONTEXT_SEGMENTS`  frases finales y **solo** los términos del glosario presentes en la frase.
+2. El prompt incluye: la frase, el título de la charla, las últimas `TRANSLATION_CONTEXT_SEGMENTS`  frases finales y **solo** los términos del glosario presentes en la frase. Indica que la frase puede ser un fragmento de una frase más larga (§6.2.4): se traduce como fragmento, sin completarla, apoyándose en las frases previas de contexto.
 3. Cada traducción se publica como evento `translation`  con `is_final=true` , el mismo `segment_id`  del original y el `track`  del idioma destino.
 4. Hay una cola por pista de traducción: las pistas avanzan en paralelo y, dentro de cada una, las frases se traducen en orden. La traducción nunca bloquea la publicación del original.
 5. La cola de cada pista es acotada (`TRANSLATION_QUEUE_MAX`). Si se llena, se descarta la frase pendiente más antigua y se registra el descarte. **(P1)** Unir las frases pendientes en una sola petición para recuperar el retraso.
 ### 6.4 Distribución y conexión de clientes
 1. El Gateway mantiene **una sola suscripción a Redis por canal**, compartida por todos los clientes que piden esa pista, y reparte cada evento en memoria. El costo en Redis no crece con la cantidad de espectadores.
-2. Un cliente nuevo abre el WebSocket y acumula lo que llega; luego pide el historial reciente por HTTP y fusiona ambos por la clave `(run_id, track, segment_id)` , conservando la `revision`  mayor. Así no hay huecos ni duplicados.
+2. **Últimas frases (P0):** el Gateway guarda en memoria las últimas `RECENT_FINALS_N`  frases finales de la ejecución actual por `(session_id, track)`; una ejecución nueva reemplaza a la anterior. Al abrir el WebSocket, el cliente recibe primero esas frases de cada pista pedida y después los eventos en vivo, como mensajes `subtitle` normales. El cliente los fusiona por la clave `(run_id, track, segment_id)` , así que un duplicado no cambia la pantalla. **(P1)** Historial completo: el cliente abre el WebSocket y acumula lo que llega; luego pide el historial reciente por HTTP y fusiona ambos por la misma clave, conservando la `revision`  mayor.
 3. En pantalla, un parcial reemplaza al anterior del mismo `segment_id` ; el final lo consolida.
 4. Si llega un evento con un `run_id`  distinto al actual, el cliente limpia la pantalla y empieza la nueva ejecución.
 ### 6.5 Fin de sesión y exportación
@@ -260,7 +260,7 @@ Reglas:
 | `GET /api/status`  | `SessionStatus` de todas las sesiones |
 | `GET /healthz`  | Salud del gateway y de su conexión a Redis |
 | `WS /ws/{session_id}?tracks=original,es`  | Eventos en vivo de una o más pistas |
-Mensajes del WebSocket: `{"type": "subtitle", "data": SubtitleEvent}` y `{"type": "ping"}` cada 20 segundos.
+Mensajes del WebSocket: `{"type": "subtitle", "data": SubtitleEvent}` y `{"type": "ping"}` cada 20 segundos. Al conectarse, el cliente recibe primero las últimas frases finales de cada pista pedida (§6.4.2).
 
 ### 7.7 Variables de entorno
 | Variable | Valor por defecto | Uso |
@@ -280,7 +280,10 @@ Mensajes del WebSocket: `{"type": "subtitle", "data": SubtitleEvent}` y `{"type"
 | `SOURCE_END_GRACE_MS`  | `3000`  | Espera del último final y de las traducciones al terminar la fuente |
 | `STATUS_INTERVAL_S`  | `2`  | Periodo de publicación de `SessionStatus` (§7.2) |
 | `STATUS_TTL_S`  | `15`  | Expiración de `SessionStatus` (§7.2) |
-| `MAX_SEGMENT_MS`  | `6000`  | Duración máxima de una frase antes del corte forzado (P1) |
+| `VAD_END_SENSITIVITY`  | `HIGH`  | Sensibilidad de fin de voz de la detección de actividad (`HIGH` o `LOW`; §6.2.1) |
+| `VAD_SILENCE_MS`  | `300`  | Silencio que cierra una frase (`silence_duration_ms`; §6.2.1) |
+| `MAX_SEGMENT_MS`  | `8000`  | Duración máxima de una frase abierta antes del corte forzado (§6.2.4) |
+| `RECENT_FINALS_N`  | `5`  | Últimas frases finales por pista que el gateway guarda en memoria y envía al conectarse un cliente (§6.4.2) |
 | `HISTORY_MAX_EVENTS`  | `5000`  | Tamaño máximo del historial por pista (P1) |
 | `HISTORY_TTL_S`  | `86400`  | Retención del historial (P1) |
 | `SESSIONS_FILE`  | `sessions.yaml`  | Ruta de la configuración |
@@ -392,7 +395,7 @@ live-subs/
 ## 14. Decisiones pendientes
 1. **Cuota:** confirmar la cuota de sesiones concurrentes del proyecto.
 2. **Marcas de tiempo:** verificar si la Live API entrega tiempos por enunciado (§8).
-3. **Corte forzado (P1):** verificar que `audio_stream_end`  a mitad de una frase fuerza el final y que la sesión sigue aceptando audio. Si no funciona, el corte se hace en el cliente con el último parcial.
+3. **Corte forzado — cerrada (2026-09-25):** `scripts/t0/vad_probe.py` confirmó que `audio_stream_end`  a mitad de una frase fuerza el final y que la sesión sigue aceptando audio (`specs/001-subs-mvp/research.md` § Resultados del probe de corte de frase).
 4. **Costos:** completar la fórmula de §10 con los precios vigentes.
 5. **Capacidad por worker:** medir cuántos escenarios soporta un proceso antes de degradar la latencia.
 ---
@@ -403,12 +406,13 @@ live-subs/
 - [ ] Original parcial y final en pantalla, sin parciales obsoletos.
 - [ ] Traducción EN→ES en la sala en inglés y ES→EN en la sala en español, vinculadas a su frase original.
 - [ ] La vista de audiencia permite elegir sesión y pista.
+- [ ] Al abrir la vista, cada pista (también las traducidas) muestra una línea en menos de 30 segundos: últimas frases al conectarse y ninguna frase abierta más de `MAX_SEGMENT_MS`.
 - [ ] `docker compose up`  funciona desde un clon limpio siguiendo el README.
 - [ ] El README explica credenciales, modelos y cómo escalar.
 ### P1
 - [ ] La sesión continúa tras un cierre de la conexión Live (prueba de más de 10 minutos).
 - [ ] El glosario corrige al menos un término técnico visible en la demo.
-- [ ] Un cliente que se conecta tarde ve las últimas frases.
+- [ ] Un cliente que se conecta tarde recupera el historial completo de la ejecución.
 - [ ] Exportación SRT/VTT/TXT de una charla completa.
 - [ ] Overlay funcionando en OBS sobre el video de la charla.
 - [ ] Latencias registradas y dentro de los objetivos de §8.

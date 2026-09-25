@@ -18,6 +18,15 @@ de traducción en lugar de agrupar frases, y medición de latencia desde P0. Ant
 tareas previas: una prueba técnica (T0, máximo 60 min) que elige el modelo traductor y confirma los
 tiempos por enunciado, y la generación de los clips de prueba con TTS (TC).
 
+**Cambio de alcance (2026-09-25).** T038 falló en CE-004 (`checklists/validation.md`). Por eso pasan a
+P0 tres cambios, medidos con `scripts/t0/vad_probe.py` (R5, R18, R19):
+
+- cierre de frase con VAD ajustado y corte forzado a los `MAX_SEGMENT_MS` (RF-045, RF-046);
+- traducción de fragmentos (RF-047);
+- últimas `RECENT_FINALS_N` frases finales en memoria del gateway, enviadas al conectarse (RF-048).
+
+Se implementan en T045–T053. `docs/architecture.md` pasa a v0.5.
+
 ## Contexto técnico
 
 **Lenguaje/versión**: Python 3.12 (imagen `python:3.12.14-slim-trixie`)
@@ -65,9 +74,9 @@ por defecto y una regla para cambiarlo. R1 está cerrada en el pipeline A.
 | 4 | Configuración | Modelos, timings, límites y rutas en `.env` y `sessions.yaml`; los valores que §7.2 y §7.6 fijaban (2 s, 15 s, 20 s) pasan a variables ([contracts/env.md](contracts/env.md)) | ✅ | ✅ |
 | 5 | Secretos | `.env` ignorado por git; solo el worker usa `env_file`; `GatewaySettings` no tiene la key (R10, R16, V8) | ✅ | ✅ |
 | 6 | Aislamiento | Un supervisor por escenario, sin `TaskGroup` común (R12); verificado en V4 | ✅ | ✅ |
-| 7 | Latencia | Cola acotada con descarte del más antiguo en ingesta, traducción y clientes WS (R7); `latency_ms` en cada evento (R4) | ✅ | ✅ |
+| 7 | Latencia | Cola acotada con descarte del más antiguo en ingesta, traducción y clientes WS (R7); `latency_ms` en cada evento (R4); últimas finales del gateway acotadas a `RECENT_FINALS_N` por pista (R18) | ✅ | ✅ |
 | 8 | Prioridad | El plan cubre solo P0; P1 y P2 quedan fuera según la spec | ✅ | ✅ |
-| 9 | Spec primero | La spec ya incluye loop, descarte y RF-044; `docs/architecture.md` v0.4 está alineado. Si T0 cambia el modelo traductor, es solo configuración | ✅ | ✅ |
+| 9 | Spec primero | La spec ya incluye loop, descarte y RF-044; `docs/architecture.md` v0.5 está alineado. Si T0 cambia el modelo traductor, es solo configuración. El cambio de alcance de T038 (RF-045 a RF-048) entra primero en spec y arquitectura, antes que el código | ✅ | ✅ |
 | 10 | Tests | Funciones puras con pytest (ver Estrategia de tests); integración con `samples/audio/` (quickstart). La fusión de eventos (JS) se verifica con `scripts/replay_events.py` en P0 y pasa a pytest en P1, según `AGENTS.md` (R13) | ✅ | ✅ |
 | 11 | Suite verde | Cada tarea se cierra con `pytest -q` en verde | ✅ | ✅ |
 | 12 | Despliegue | `docker compose up` con `sessions.yaml` y clips por defecto en el repo; healthcheck de Redis antes del worker y del gateway; validado en V1 | ✅ | ✅ |
@@ -87,7 +96,7 @@ El detalle y las alternativas descartadas están en [research.md](research.md#de
 | R2 | Traductor `gemini-3.8-flash`; se compara con `gemini-3.5-flash-lite` — **T0** | Elegir sin medir |
 | R3 | `thinking_level` al mínimo del modelo (`LOW` / `MINIMAL`), sin pensamientos en la respuesta, salida solo con la traducción | Nivel por defecto (`MEDIUM`); `thinking_budget=0` (no soportado desde 3.5) |
 | R4 | Tiempos por offsets de la Live API si existen; si no, reloj de audio + detección de voz por energía — **T0** | Posición al recibir el evento (latencia ≈ 0 por construcción) |
-| R5 | VAD automático, modo `VERBATIM` (comparación con `SMART` opcional en T0) | VAD híbrido o manual (P1); `SMART` |
+| R5 | VAD automático con `END_SENSITIVITY_HIGH` y `silence_duration_ms=300`, modo `VERBATIM`, más `audio_stream_end` si la frase abierta supera `MAX_SEGMENT_MS=8000` — **actualizada con `vad_probe.py`** | VAD por defecto (1 final en 90 s); `audio_stream_end` fijo cada 6 s (corta frases); VAD manual; `SMART` |
 | R6 | Un `ffmpeg` por vuelta; el loop reinicia proceso, ejecución y sesión | `-stream_loop -1` (sin límite entre vueltas) |
 | R7 | Cola acotada con descarte del más antiguo (ingesta, traducción, WS) | Colas sin límite; contrapresión que bloquea |
 | R8 | Una suscripción por patrón `subs:*` por gateway, reparto en memoria | Una suscripción por cliente |
@@ -100,6 +109,8 @@ El detalle y las alternativas descartadas están en [research.md](research.md#de
 | R15 | RF-044: contraste ≥ 4,5:1, 360 px sin scroll horizontal, ≥ 3 tamaños | "Legible" sin métrica |
 | R16 | Una imagen slim con ffmpeg de Debian; Redis alpine | Imagen por servicio; compilar ffmpeg |
 | R17 | Charla real de Nerdearla solo en local (`samples/local/`, ignorada por git) para T0; clips del repo con `gemini-3.8-flash-tts` | Subir la charla real (licencia); grabar a mano (tiempo) |
+| R18 | Últimas `RECENT_FINALS_N` finales por `(session_id, track)` en memoria del gateway, enviadas al abrir el WS | Historial en Redis + HTTP (P1) |
+| R19 | El prompt del traductor trata el texto como posible fragmento y no lo completa | Unir fragmentos antes de traducir (suma espera) |
 
 ## Tareas previas
 
@@ -123,7 +134,8 @@ reglas de decisión en [research.md § T0](research.md#t0-prueba-técnica-tarea-
   - si la Live API da offsets por enunciado (R4);
   - que dos sesiones Live simultáneas funcionan con la key.
 - **Opcional**, si sobra tiempo: `SMART` frente a `VERBATIM` (R5).
-- **No incluye** la verificación de `audio_stream_end` (pasa a P1 con el corte forzado).
+- **No incluye** la verificación de `audio_stream_end` (pasa a P1 con el corte forzado). *(Se
+  verificó después con `scripts/t0/vad_probe.py`, al pasar el corte forzado a P0; ver R5.)*
 - **Hecha cuando**: los resultados están en `research.md § Resultados de T0` y R2 y R4 quedan
   cerrados, o cuando se cumplen los 60 min; en ese caso quedan los valores por defecto.
 
@@ -197,6 +209,8 @@ tests/
 ├── test_audio_clock.py
 ├── test_segment_tracker.py
 ├── test_translator_pure.py
+├── test_forced_cut.py      # Δ regla del corte forzado (RF-046)
+├── test_recent_finals.py   # Δ últimas finales del gateway (RF-048)
 └── test_logs.py
 ```
 
@@ -208,18 +222,18 @@ responsabilidad de los módulos de §5. `overlay.html` y `panel.html` son P1 y n
 
 | Módulo | RF que cubre |
 | --- | --- |
-| `common/config.py` | RF-012 (cantidad de contexto), RF-014 (tamaño de cola), RF-027, RF-028, RF-029, RF-030, RF-032, RF-043 (campo `loop`) |
+| `common/config.py` | RF-012 (cantidad de contexto), RF-014 (tamaño de cola), RF-027, RF-028, RF-029, RF-030, RF-032, RF-043 (campo `loop`); parámetros de RF-045, RF-046 y RF-048 |
 | `common/schema.py` | RF-035, RF-036, RF-037, RF-038 (campos), RF-039; estados de RF-025 y RF-026 |
 | `common/queues.py` | RF-004, RF-014 (mecanismo de descarte) |
 | `common/logs.py` | RF-034 |
 | `worker/main.py` | RF-023, RF-024, RF-025 (supervisor), RF-026, RF-027 (filtro), RF-043 (loop) |
 | `worker/ingest.py` | RF-001, RF-002, RF-003, RF-004, RF-005 |
-| `worker/transcriber.py` | RF-003 (envío continuo), RF-006, RF-007, RF-008, RF-025 (falla de la Live API) |
-| `worker/translator.py` | RF-009, RF-010, RF-011, RF-012, RF-013, RF-014, RF-015 |
+| `worker/transcriber.py` | RF-003 (envío continuo), RF-006, RF-007, RF-008, RF-025 (falla de la Live API), RF-045, RF-046 |
+| `worker/translator.py` | RF-009, RF-010, RF-011, RF-012, RF-013, RF-014, RF-015, RF-047 |
 | `worker/publisher.py` | RF-024 (`run:*`), RF-025 y RF-026 (`status:*`), RF-036 (canal por pista), RF-038 (`emitted_at_ms`, `latency_ms`) |
-| `gateway/main.py` | RF-016, RF-017, RF-022, RF-031 (no lee la key) |
+| `gateway/main.py` | RF-016, RF-017, RF-022, RF-031 (no lee la key), RF-048 |
 | `gateway/static/index.html` | RF-016, RF-017, RF-018, RF-019, RF-020, RF-021, RF-044 |
-| `Dockerfile`, `docker-compose.yml`, `.env.example` | RF-030, RF-031, RF-033 |
+| `Dockerfile`, `docker-compose.yml`, `.env.example` | RF-030, RF-031, RF-033; `RECENT_FINALS_N` en el entorno del gateway (RF-048) |
 | `sessions.yaml`, `samples/audio/`, `scripts/make_clips.py` | RF-040 |
 | `README.md` | RF-041 |
 | `LICENSE` (ya existe, Apache 2.0) | RF-042 |
@@ -235,7 +249,9 @@ responsabilidad de los módulos de §5. `overlay.html` y `panel.html` son P1 y n
 | `test_queues.py` | La cola acotada descarta el más antiguo, cuenta los descartes y no bloquea al productor |
 | `test_audio_clock.py` | Posición ↔ hora de envío, detección de voz por RMS, último y primer bloque con voz, cálculo de latencia según §8 |
 | `test_segment_tracker.py` | Parciales → `revision` creciente; final con `revision` mayor; nuevo `segment_id` después del final; final sin parciales; parciales vacíos o repetidos ignorados; `sequence` monótona |
-| `test_translator_pure.py` | Pistas destino (excluye el idioma de origen), armado del prompt (título + últimas N finales, sin parciales), limpieza de la respuesta |
+| `test_translator_pure.py` | Pistas destino (excluye el idioma de origen), armado del prompt (título + últimas N finales, sin parciales; indica que el texto puede ser un fragmento y no se completa, RF-047), limpieza de la respuesta |
+| `test_forced_cut.py` | Regla del corte forzado: sin frase abierta no corta; corta al llegar a `MAX_SEGMENT_MS` desde el primer parcial; después de un corte, no vuelve a cortar hasta otros `MAX_SEGMENT_MS`; una frase nueva reinicia la cuenta |
+| `test_recent_finals.py` | Últimas finales por `(session_id, track)`: guarda como máximo N, ignora parciales, conserva el orden de llegada, una ejecución nueva descarta las anteriores, N = 0 no guarda nada |
 | `test_logs.py` | El JSON incluye `session_id` y nivel; en INFO no aparece texto de subtítulos |
 
 No se usan mocks de la API de Gemini para dar por buena una tarea (`AGENTS.md`).
@@ -247,12 +263,14 @@ su comando de "Hecha cuando", tomado de [quickstart.md](quickstart.md):
 | --- | --- |
 | Ingesta + transcripción | `docker compose up worker redis` + `redis-cli PSUBSCRIBE 'subs:*'`: aparecen parciales y finales de `sala1` a ritmo real |
 | Traducción | Mismo comando: aparecen eventos `subs:sala1:es` con el `segment_id` de su final |
+| Corte de frase | 90 s de `PSUBSCRIBE 'subs:*'`: `sala1` y `sala2` publican finales en `original`, y ningún intervalo entre finales seguidos de la misma ejecución supera 10 s mientras hay voz |
+| Últimas frases | `python -m websockets "ws://localhost:8000/ws/sala2?tracks=en"` recibe hasta `RECENT_FINALS_N` finales apenas se conecta |
 | Gateway + WS | `python -m websockets ws://localhost:8000/ws/sala1?tracks=original,es` |
 | Vista | V2, V3, V6, V9 |
 | Aislamiento, configuración, secretos | V4, V7, V8 |
 | Despliegue | V1 desde una carpeta nueva |
 
-## Cambios incorporados a `docs/architecture.md` (v0.4)
+## Cambios incorporados a `docs/architecture.md` (v0.4 y v0.5)
 
 Las introdujo la spec (por pedido del usuario) o este plan, y ya están en `docs/architecture.md`
 v0.4.
@@ -265,6 +283,11 @@ v0.4.
 | §8 | Aproximación de tiempos refinada con detección de voz | R4 |
 | §4 (P1 "latencia registrada") | La latencia se mide desde P0 | Spec, constitución principio 7 |
 | §5, §13 | `common/queues.py`, `common/logs.py`; `samples/local/`, `scripts/` | R7, R14, R17 |
+| §4, §6.2.1, §6.2.4, §14.3 (v0.5) | VAD ajustado y corte forzado pasan a P0; `audio_stream_end` verificado | Spec RF-045, RF-046; R5 |
+| §6.3.2 (v0.5) | El prompt trata la frase como posible fragmento | Spec RF-047; R19 |
+| §4, §6.4.2, §7.6 (v0.5) | Últimas finales en memoria del gateway al conectarse; el historial en Redis sigue en P1 | Spec RF-048; R18 |
+| §7.7 (v0.5) | `VAD_END_SENSITIVITY`, `VAD_SILENCE_MS`, `RECENT_FINALS_N`; `MAX_SEGMENT_MS` pasa a P0 con 8000 | Principio 4 |
+| §15 (v0.5) | Criterio P0 de primera línea en < 30 s; el criterio P1 de clientes tardíos pasa a historial completo | CE-004 |
 
 La fusión de eventos se verifica con `scripts/replay_events.py` en P0 y pasa a pytest en P1
 (`AGENTS.md`, sección Testing).

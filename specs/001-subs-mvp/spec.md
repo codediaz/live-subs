@@ -15,6 +15,13 @@ P2; criterios de finalización tomados de P0 en §15."
 > prioridades 1–3 de las historias solo ordenan el trabajo dentro de la feature. `sessions.yaml`,
 > `docker compose up` y `SubtitleEvent` se nombran porque son interfaces del producto exigidas por el
 > desafío y por la constitución, no decisiones de implementación.
+>
+> **Cambio de alcance (2026-09-25).** La validación desde un clon limpio (T038) falló en CE-004: la
+> sala en español no producía frases finales y las pistas traducidas tardaban más de 30 s en mostrar
+> la primera línea (también afecta CE-001 y CE-003). Con los datos de `scripts/t0/vad_probe.py`
+> (`research.md` § Resultados del probe de corte de frase) pasan a P0 el cierre de frase ajustado y el
+> corte por duración máxima (RF-045, RF-046), la traducción de fragmentos (RF-047) y las últimas
+> frases al conectarse (RF-048).
 
 ## Escenarios de usuario y pruebas *(obligatorio)*
 
@@ -106,8 +113,9 @@ la letra configurando solo la API key y comprobar los criterios de éxito CE-001
 
 ### Casos borde
 
-- **Frase muy larga sin pausas**: en P0 no hay corte forzado (es P1); la frase final y su traducción
-  pueden demorarse. Se acepta.
+- **Frase muy larga sin pausas**: si una frase sigue abierta al llegar a la duración máxima, se cierra
+  como final aunque el speaker no haya hecho una pausa (RF-046). Esa frase puede ser un fragmento y su
+  traducción se hace como fragmento, sin completarla (RF-047).
 - **La conexión de transcripción se cierra** (dura unos 10 minutos): en P0 no hay reconexión (es P1);
   si ocurre, el escenario pasa a estado de error y los demás siguen. Con loop activado, cada vuelta del
   clip abre una ejecución y una sesión de transcripción nuevas, así que un clip de menos de 10 minutos
@@ -129,8 +137,9 @@ la letra configurando solo la API key y comprobar los criterios de éxito CE-001
   reemplaza a cualquier parcial.
 - **Reinicio del procesamiento**: comienza una ejecución nueva; la vista limpia la pantalla y no mezcla
   frases de ejecuciones distintas.
-- **Espectador que llega tarde o pierde la conexión**: en P0 ve los subtítulos desde que se conecta;
-  el historial y la reconexión automática son P1. Recargar la página vuelve a conectar.
+- **Espectador que llega tarde o pierde la conexión**: en P0, al conectarse ve las últimas frases
+  finales de la pista elegida (RF-048) y luego los subtítulos en vivo; el historial completo y la
+  reconexión automática son P1. Recargar la página vuelve a conectar.
 
 ## Requisitos *(obligatorio)*
 
@@ -161,6 +170,13 @@ Formato EARS: *El sistema deberá…* (siempre), *Cuando…* (evento), *Mientras
   `original`, con su posición de inicio y fin en la charla; la siguiente hipótesis abrirá una frase
   nueva.
 - **RF-008**: El sistema deberá transcribir charlas cuyo idioma de origen configurado sea `en` o `es`.
+- **RF-045**: Cuando el speaker hace una pausa, el sistema deberá cerrar la frase en curso como final;
+  la sensibilidad de detección del fin de la voz y el silencio mínimo que cierra una frase deberán ser
+  configurables.
+- **RF-046**: Si una frase sigue abierta sin versión final durante más de una duración máxima
+  configurable, entonces el sistema deberá forzar su cierre como final sin interrumpir el envío de
+  audio; si después del cierre forzado sigue sin final durante otra duración máxima, deberá forzarlo
+  otra vez.
 
 **Traducción**
 
@@ -172,6 +188,9 @@ Formato EARS: *El sistema deberá…* (siempre), *Cuando…* (evento), *Mientras
 - **RF-011**: El sistema deberá soportar al menos las direcciones inglés → español y español → inglés.
 - **RF-012**: Cuando traduce una frase, el sistema deberá usar como contexto el título de la charla y
   las últimas frases finales del escenario (cantidad configurable).
+- **RF-047**: Cuando traduce una frase, el sistema deberá tratarla como un posible fragmento de una
+  frase más larga: deberá traducirla como fragmento, sin completarla ni agregar contenido, apoyándose
+  en las frases previas del contexto.
 - **RF-013**: Mientras hay traducciones pendientes, el sistema deberá publicar el original sin esperar
   a ellas; las pistas de traducción deberán avanzar en paralelo y, dentro de cada pista, en el orden de
   las frases.
@@ -196,6 +215,10 @@ Formato EARS: *El sistema deberá…* (siempre), *Cuando…* (evento), *Mientras
   cada frase el de revisión mayor, y un final deberá reemplazar a cualquier parcial de la misma frase.
 - **RF-021**: Cuando llega un evento de una ejecución distinta a la que se muestra, la vista deberá
   limpiar la pantalla y continuar con la ejecución nueva.
+- **RF-048**: Cuando un espectador se conecta a una o más pistas de un escenario, el sistema deberá
+  enviarle primero las últimas frases finales de cada pista en la ejecución actual (cantidad
+  configurable) y después los subtítulos en vivo. Esas frases se guardan solo en la memoria del
+  componente que atiende a los espectadores; no es el historial persistente de P1.
 - **RF-022**: La vista de audiencia no deberá permitir que un cliente indique fuentes de audio, URLs ni
   rutas; las fuentes solo se definen en la configuración del operador.
 - **RF-044**: La vista de audiencia deberá ser legible en celular y en escritorio, con alto contraste
@@ -272,7 +295,8 @@ Formato EARS: *El sistema deberá…* (siempre), *Cuando…* (evento), *Mientras
 - **Pista**: flujo de subtítulos de un escenario. `original` para el idioma hablado y una por cada
   idioma destino (`es`, `en`).
 - **Frase (segmento)**: unidad de subtítulo. La comparten sus parciales, su final y sus traducciones;
-  tiene posición de inicio y fin en la charla.
+  tiene posición de inicio y fin en la charla. Si se cerró por duración máxima (RF-046), puede ser un
+  fragmento de una frase más larga.
 - **SubtitleEvent**: el mensaje de un subtítulo. Lleva versión del contrato, escenario, ejecución,
   pista, orden de emisión, frase, revisión, tipo (original o traducción), idioma, texto, si es final,
   posición de inicio y fin, hora de emisión y latencia.
@@ -325,11 +349,11 @@ Formato EARS: *El sistema deberá…* (siempre), *Cuando…* (evento), *Mientras
 
 Todo lo P1 y P2 de `docs/architecture.md` §4:
 
-- **P1**: reconexión ante cierre de la conexión de transcripción; glosarios; corte forzado de frase;
-  historial para espectadores que llegan tarde y reconexión automática del cliente; panel de estado y
-  latencia; exportación SRT/VTT/TXT; overlay para OBS/vMix; portugués; traducción agrupada de frases
-  pendientes para recuperar el retraso; reintento de traducciones fallidas; reintento ante caída de la
-  mensajería interna.
+- **P1**: reconexión ante cierre de la conexión de transcripción; glosarios; historial completo para
+  espectadores que llegan tarde (más allá de las últimas frases de RF-048) y reconexión automática del
+  cliente; panel de estado y latencia; exportación SRT/VTT/TXT; overlay para OBS/vMix; portugués;
+  traducción agrupada de frases pendientes para recuperar el retraso; reintento de traducciones
+  fallidas; reintento ante caída de la mensajería interna.
 - **P2**: panel de producción completo; modo bilingüe; idioma de origen automático; recarga en caliente
   de `sessions.yaml`; micrófono; URLs de YouTube; reanudación de sesión y pre-apertura.
 - **Fuera del producto**: autenticación, almacenamiento permanente, edición colaborativa de
