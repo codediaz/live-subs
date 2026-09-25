@@ -554,13 +554,16 @@ paralelo: tocan archivos distintos. T053 va al final.
 
 **Propósito**: material para el jurado. Plazo: **2026-09-25 15:00 UTC**.
 
-- [ ] T040 Agregar al `README.md` el diagrama de arquitectura (bloque de texto o Mermaid, que GitHub
+- [x] T040 Agregar al `README.md` el diagrama de arquitectura (bloque de texto o Mermaid, que GitHub
   muestra sin build), basado en `docs/architecture.md` §3, y una sección de demo con el lugar para el
   link del video.
   - **RF**: RF-041.
   - **Hecho cuando**: el README muestra el diagrama en la vista previa de GitHub (o en un visor
     Markdown local).
-- [ ] T041 [P] Escribir el guion del video en inglés en `docs/delivery/video-script.md`, de 1 a 2 min:
+  - **Ajuste (2026-09-25, pedido del usuario)**: el diagrama es la imagen `docs/architecture.svg`, no
+    Mermaid. Se agregan las secciones "Results" (métricas medidas) y "How it was built" (SDD con Spec
+    Kit, Claude Code y Codex).
+- [x] T041 [P] Escribir el guion del video en inglés en `docs/delivery/video-script.md`, de 1 a 2 min:
   - problema;
   - demo de dos salas con subtítulos y traducción;
   - overlay / vista en celular;
@@ -570,7 +573,9 @@ paralelo: tocan archivos distintos. T053 va al final.
   Tiene que incluir audio real de Nerdearla subtitulado por el sistema (§15, Entrega).
   - **RF**: —.
   - **Hecho cuando**: el guion tiene tiempos por bloque que suman entre 60 y 120 s.
-- [ ] T042 [P] Escribir el texto para Devpost en inglés en `docs/delivery/devpost.md`:
+  - **Ajuste (2026-09-25, pedido del usuario)**: sin overlay de OBS (no se construyó); muestra la vista
+    en celular y la sala en español subtitulada al inglés.
+- [x] T042 [P] Escribir el texto para Devpost en inglés en `docs/delivery/devpost.md`:
   - inspiración;
   - qué hace;
   - cómo se construyó (Gemini Live + Flash, Redis, FastAPI);
