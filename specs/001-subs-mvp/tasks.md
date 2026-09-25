@@ -323,7 +323,7 @@ traducciones vinculadas a su frase y la vista legible en celular.
 
 **Prueba independiente**: quickstart V2, V3, V4, V5, V7, V8 y V9.
 
-- [ ] T029 [P] [US1] Escribir `tests/test_translator_pure.py` antes de la implementación:
+- [x] T029 [P] [US1] Escribir `tests/test_translator_pure.py` antes de la implementación:
   - pistas destino = `target_languages` menos el idioma de origen;
   - el prompt incluye el `title` y las últimas `TRANSLATION_CONTEXT_SEGMENTS` frases **finales**,
     nunca parciales, y pide devolver solo la traducción;
@@ -332,7 +332,7 @@ traducciones vinculadas a su frase y la vista legible en celular.
     `kind` `translation` e `is_final` true.
   - **RF**: RF-009, RF-010, RF-011, RF-012.
   - **Hecho cuando**: `pytest -q tests/test_translator_pure.py` falla solo por la implementación faltante.
-- [ ] T030 [US1] Implementar las funciones puras de `src/subs/worker/translator.py`.
+- [x] T030 [US1] Implementar las funciones puras de `src/subs/worker/translator.py`.
   - **RF**: RF-009, RF-010, RF-011, RF-012.
   - **Hecho cuando**: `pytest -q` en verde.
 - [ ] T031 [US1] Implementar la parte en ejecución de `src/subs/worker/translator.py` y conectarla en
