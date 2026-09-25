@@ -144,14 +144,14 @@ escribir la aplicación. R1 ya está cerrada en el pipeline A.
   - `load_sessions(path, worker_sessions)`, que lanza un error con escenario y campo.
   - **RF**: RF-012, RF-014, RF-027, RF-028, RF-029, RF-030, RF-031, RF-032, RF-043.
   - **Hecho cuando**: `pytest -q` en verde.
-- [ ] T011 [P] Escribir `tests/test_queues.py` antes de la implementación. La cola acotada:
+- [x] T011 [P] Escribir `tests/test_queues.py` antes de la implementación. La cola acotada:
   - al llenarse descarta el elemento **más antiguo**;
   - cuenta los descartes;
   - `put` nunca bloquea;
   - `get` devuelve en orden.
   - **RF**: RF-004, RF-014.
   - **Hecho cuando**: `pytest -q tests/test_queues.py` falla solo por la implementación faltante.
-- [ ] T012 Implementar `src/subs/common/queues.py` (cola asyncio acotada con descarte del más antiguo
+- [x] T012 Implementar `src/subs/common/queues.py` (cola asyncio acotada con descarte del más antiguo
   y contador).
   - **RF**: RF-004, RF-014.
   - **Hecho cuando**: `pytest -q` en verde.
