@@ -22,7 +22,7 @@ tiempos por enunciado, y la generación de los clips de prueba con TTS (TC).
 
 **Lenguaje/versión**: Python 3.12 (imagen `python:3.12.14-slim-trixie`)
 
-**Dependencias principales**: FastAPI 0.141.1, uvicorn 0.53.0, websockets 17.1, Pydantic 2.13.5,
+**Dependencias principales**: FastAPI 0.141.1, uvicorn 0.53.0, websockets 16.1.1, Pydantic 2.13.5,
 redis-py 8.1.0, google-genai 2.25.0, PyYAML 6.0.3; ffmpeg del sistema. Justificación de cada una en
 [research.md § Dependencias](research.md#dependencias-versiones-fijadas).
 
