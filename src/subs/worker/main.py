@@ -20,6 +20,7 @@ from subs.common.schema import SessionStatus, SubtitleEvent
 from subs.worker.ingest import AudioClock, ingest_audio
 from subs.worker.publisher import Publisher
 from subs.worker.transcriber import SegmentTracker, transcribe
+from subs.worker.translator import FinalHistory, TrackTranslator, target_tracks
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,13 +42,23 @@ class ScenarioState:
         self.clock: AudioClock | None = None
         self.last_event_at_ms: int | None = None
         self.latency_original_ms: int | None = None
+        self.latency_translation_ms: int | None = None
         self.errors = 0
         self.last_error: str | None = None
 
     def observe(self, event: SubtitleEvent) -> None:
         self.last_event_at_ms = event.emitted_at_ms
-        if event.kind == "original" and event.latency_ms is not None:
+        if event.latency_ms is None:
+            return
+        if event.kind == "original":
             self.latency_original_ms = event.latency_ms
+        else:
+            self.latency_translation_ms = event.latency_ms
+
+    def record_translation_error(self, error: str) -> None:
+        """A failed sentence counts as an error but does not change the scenario state (RF-015)."""
+        self.errors += 1
+        self.last_error = f"translation: {error}"[:300]
 
     def snapshot(self) -> SessionStatus:
         # starting -> live once the first audio chunk has been sent (data-model.md §7).
@@ -61,7 +72,7 @@ class ScenarioState:
             uptime_s=(current - self.started_at_ms) // 1000,
             last_event_at_ms=self.last_event_at_ms,
             latency_original_ms=self.latency_original_ms,
-            latency_translation_ms=None,  # translation arrives in T031
+            latency_translation_ms=self.latency_translation_ms,
             reconnects=0,
             errors=self.errors,
             last_error=self.last_error,
@@ -97,8 +108,36 @@ async def run_scenario(
         )
         source_done = asyncio.Event()
 
-        async def on_event(event: SubtitleEvent) -> None:
+        async def publish(event: SubtitleEvent) -> None:
             state.observe(await publisher.publish_event(event))
+
+        history = FinalHistory(settings.translation_context_segments)
+        translators = [
+            TrackTranslator(
+                client,
+                session_id=config.id,
+                source_language=config.source_language,
+                target=target,
+                title=config.title,
+                model=settings.translate_model,
+                thinking_level=settings.translate_thinking_level,
+                timeout_s=settings.translate_timeout_s,
+                queue_max=settings.translation_queue_max,
+                take_sequence=tracker.take_sequence,
+                publish=publish,
+                on_error=state.record_translation_error,
+            )
+            for target in target_tracks(config.source_language, config.target_languages)
+        ]
+
+        async def on_event(event: SubtitleEvent) -> None:
+            await publish(event)
+            if event.is_final:
+                # Enqueue only: the original is already published and never waits for translation.
+                context = history.texts()
+                history.add(event)
+                for translator in translators:
+                    translator.submit(event, context)
 
         async def feed() -> None:
             try:
@@ -107,22 +146,30 @@ async def run_scenario(
                 source_done.set()
 
         _LOGGER.info("run_started", extra={**extra, "run_id": run_id})
-        async with asyncio.TaskGroup() as group:
-            group.create_task(feed())
-            group.create_task(
-                transcribe(
-                    client,
-                    model=settings.transcribe_model,
-                    source_language=config.source_language,
-                    session_id=config.id,
-                    audio_queue=audio_queue,
-                    source_done=source_done,
-                    clock=clock,
-                    tracker=tracker,
-                    on_event=on_event,
-                    end_grace_ms=settings.source_end_grace_ms,
+        translator_tasks = [asyncio.create_task(translator.run()) for translator in translators]
+        try:
+            # Ingestion and transcription of this run; a failure in either cancels the other.
+            async with asyncio.TaskGroup() as group:
+                group.create_task(feed())
+                group.create_task(
+                    transcribe(
+                        client,
+                        model=settings.transcribe_model,
+                        source_language=config.source_language,
+                        session_id=config.id,
+                        audio_queue=audio_queue,
+                        source_done=source_done,
+                        clock=clock,
+                        tracker=tracker,
+                        on_event=on_event,
+                        end_grace_ms=settings.source_end_grace_ms,
+                    )
                 )
-            )
+            await asyncio.gather(*(t.drain(settings.source_end_grace_ms / 1000) for t in translators))
+        finally:
+            for task in translator_tasks:
+                task.cancel()
+            await asyncio.gather(*translator_tasks, return_exceptions=True)
         state.state = "stopped"
         _LOGGER.info("run_stopped", extra={**extra, "run_id": run_id, "dropped_chunks": audio_queue.dropped})
     except Exception as exc:  # noqa: BLE001 - the supervisor turns every failure into status 'error'

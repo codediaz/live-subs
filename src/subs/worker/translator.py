@@ -3,10 +3,19 @@
 Only final original sentences are translated, never partials (constitution, principle 2).
 """
 
+import asyncio
+import logging
+import time
 from collections import deque
-from collections.abc import Iterable
+from collections.abc import Awaitable, Callable, Iterable
 
+from google import genai
+from google.genai import types
+
+from subs.common.queues import DropOldestQueue
 from subs.common.schema import SubtitleEvent
+
+_LOGGER = logging.getLogger(__name__)
 
 LANGUAGE_NAMES = {"en": "English", "es": "Spanish", "pt": "Portuguese"}
 _WRAPPING_QUOTES = {'"': '"', "'": "'", "“": "”", "«": "»", "„": "“"}
@@ -86,3 +95,107 @@ def translation_event(
         emitted_at_ms=emitted_at_ms,
         latency_ms=latency_ms,
     )
+
+
+class TrackTranslator:
+    """One target track: a bounded queue of final sentences, translated in order (RF-013, RF-014).
+
+    submit() never blocks, so publishing the original never waits for a translation. A failed or
+    timed-out translation is logged and skipped; the next sentence continues (RF-015).
+    """
+
+    def __init__(
+        self,
+        client: genai.Client,
+        *,
+        session_id: str,
+        source_language: str,
+        target: str,
+        title: str,
+        model: str,
+        thinking_level: str,
+        timeout_s: float,
+        queue_max: int,
+        take_sequence: Callable[[], int],
+        publish: Callable[[SubtitleEvent], Awaitable[None]],
+        on_error: Callable[[str], None],
+    ) -> None:
+        self.client = client
+        self.session_id = session_id
+        self.target = target
+        self.title = title
+        self.model = model
+        self.timeout_s = timeout_s
+        self.take_sequence = take_sequence
+        self.publish = publish
+        self.on_error = on_error
+        self.config = types.GenerateContentConfig(
+            system_instruction=system_instruction(source_language, target),
+            # Minimum reasoning the model allows, to keep latency low (research.md R3).
+            thinking_config=types.ThinkingConfig(thinking_level=thinking_level, include_thoughts=False),
+            # No tools are used; skip the SDK's function-calling loop.
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+        )
+        self._queue: DropOldestQueue[tuple[SubtitleEvent, list[str]]] = DropOldestQueue(queue_max)
+        self._idle = asyncio.Event()
+        self._idle.set()
+
+    def submit(self, original: SubtitleEvent, context: list[str]) -> None:
+        self._idle.clear()
+        dropped = self._queue.put_nowait((original, context))
+        if dropped is not None:
+            _LOGGER.warning(
+                "translation_dropped",
+                extra={
+                    "session_id": self.session_id,
+                    "track": self.target,
+                    "segment_id": dropped[0].segment_id,
+                    "dropped_total": self._queue.dropped,
+                },
+            )
+
+    async def run(self) -> None:
+        while True:
+            original, context = await self._queue.get()
+            await self._translate(original, context)
+            if self._queue.empty():
+                self._idle.set()
+
+    async def drain(self, timeout_s: float) -> None:
+        """Wait up to timeout_s for pending sentences, e.g. when the source ends."""
+        try:
+            await asyncio.wait_for(self._idle.wait(), timeout_s)
+        except TimeoutError:
+            _LOGGER.warning(
+                "translation_drain_timeout",
+                extra={"session_id": self.session_id, "track": self.target, "pending": self._queue.qsize()},
+            )
+
+    async def _translate(self, original: SubtitleEvent, context: list[str]) -> None:
+        extra = {"session_id": self.session_id, "track": self.target, "segment_id": original.segment_id}
+        try:
+            response = await asyncio.wait_for(
+                self.client.aio.models.generate_content(
+                    model=self.model,
+                    contents=build_prompt(self.title, context, original.text),
+                    config=self.config,
+                ),
+                self.timeout_s,
+            )
+            text = clean_translation(response.text or "")
+            if not text:
+                raise ValueError("empty translation")
+            event = translation_event(
+                original,
+                target=self.target,
+                text=text,
+                sequence=self.take_sequence(),
+                emitted_at_ms=time.time_ns() // 1_000_000,
+            )
+            await self.publish(event)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - one failed sentence must not stop the track
+            error = "timeout" if isinstance(exc, TimeoutError) else f"{type(exc).__name__}: {exc}"[:300]
+            _LOGGER.error("translation_failed", extra={**extra, "error": error})
+            self.on_error(error)
