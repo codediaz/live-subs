@@ -43,7 +43,7 @@ escribir la aplicación. R1 ya está cerrada en el pipeline A.
   - `GEMINI_API_KEY` exportada en la shell.
   - **RF**: — (prerrequisito de T001).
   - **Hecho cuando**: `ls samples/local/` muestra el clip y `ffmpeg -version` responde.
-- [ ] T001 T0 (máximo 60 min) en `scripts/t0/`. Es descartable, sin tests y fuera de la imagen.
+- [x] T001 T0 (máximo 60 min) en `scripts/t0/`. Es descartable, sin tests y fuera de la imagen.
   - `scripts/t0/live_probe.py`:
     - envía el clip a ritmo real (PCM 16 kHz mono, bloques de 100 ms) a `gemini-3.5-transcribe-live`
       por `client.aio.live.connect`;
