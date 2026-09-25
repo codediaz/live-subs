@@ -20,6 +20,7 @@ from subs.common.schema import SessionStatus, SubtitleEvent, channel_name
 
 _LOGGER = logging.getLogger(__name__)
 _INDEX = Path(__file__).parent / "static" / "index.html"
+_OVERLAY = Path(__file__).parent / "static" / "overlay.html"
 
 
 class RecentFinals:
@@ -148,6 +149,11 @@ def create_app(
     @app.get("/")
     async def index() -> HTMLResponse:
         return HTMLResponse(_INDEX.read_text(encoding="utf-8"))
+
+    @app.get("/overlay.html")
+    async def overlay() -> HTMLResponse:
+        # OBS/vMix browser source (RF-049); session and track come from the query string.
+        return HTMLResponse(_OVERLAY.read_text(encoding="utf-8"))
 
     @app.websocket("/ws/{session_id}")
     async def websocket_subtitles(websocket: WebSocket, session_id: str, tracks: str = "") -> None:

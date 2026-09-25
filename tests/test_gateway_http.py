@@ -52,6 +52,9 @@ async def test_http_contract() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         assert (await client.get("/healthz")).status_code == 200
         assert (await client.get("/")).status_code == 200
+        overlay = await client.get("/overlay.html")
+        assert overlay.status_code == 200
+        assert overlay.headers["content-type"].startswith("text/html")
         listing = (await client.get("/api/sessions")).json()
         assert [item["id"] for item in listing] == ["sala1", "sala2"]
         assert listing[0]["tracks"] == ["original", "es"]

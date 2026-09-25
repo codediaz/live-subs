@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live Subs — Overlay</title>
+  <!-- OBS/vMix browser source (RF-049):
+       /overlay.html?session=sala2&track=en&size=42&position=bottom&partials=true -->
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
+    body { display: flex; flex-direction: column; justify-content: flex-end; font-family: system-ui, sans-serif; }
+    body.top { justify-content: flex-start; }
+    .frame { padding: .4em 5vw; font-size: 42px; }
+    /* Two lines at most: the newest text sits at the bottom and older text is clipped at the top. */
+    .captions {
+      display: flex; flex-direction: column; justify-content: flex-end;
+      max-height: 2.5em; line-height: 1.25; overflow: hidden;
+      margin: 0; color: #fff; font-weight: 700; text-align: center; overflow-wrap: anywhere;
+      -webkit-text-stroke: .08em #000; paint-order: stroke fill;
+      text-shadow: 0 0 .12em #000, 0 .04em .1em #000;
+    }
+  </style>
+</head>
+<body>
+  <div class="frame" id="frame"><p class="captions" id="captions"></p></div>
+  <script>
+    const RECONNECT_MS = 2000;
+    const DEFAULT_SIZE_PX = 42;
+    const MIN_SIZE_PX = 12;
+    const MAX_SIZE_PX = 200;
+    const VISIBLE_EVENTS = 4;  // enough text to fill two lines
+    const MAX_EVENTS = 50;     // bound the merge map on long broadcasts
+
+    const params = new URLSearchParams(location.search);
+    const sessionId = params.get('session') || '';
+    const track = params.get('track') || 'original';
+    const requestedSize = Number.parseInt(params.get('size') ?? '', 10);
+    const sizePx = Number.isInteger(requestedSize) && requestedSize >= MIN_SIZE_PX && requestedSize <= MAX_SIZE_PX
+      ? requestedSize : DEFAULT_SIZE_PX;
+    const showPartials = params.get('partials') !== 'false';
+    if (params.get('position') === 'top') document.body.classList.add('top');
+    document.getElementById('frame').style.fontSize = `${sizePx}px`;
+
+    const captions = document.getElementById('captions');
+    let currentRun = null;
+    const events = new Map();
+
+    function clearCaptions() {
+      currentRun = null;
+      events.clear();
+      captions.replaceChildren();
+    }
+
+    function orderedEvents() {
+      return [...events.values()].sort((a, b) => a.start_ms - b.start_ms || a.segment_id - b.segment_id);
+    }
+
+    function renderCaptions() {
+      const text = orderedEvents().slice(-VISIBLE_EVENTS).map(event => event.text).join(' ');
+      captions.replaceChildren(document.createTextNode(text));
+    }
+
+    // Same merge as index.html: key (run_id, track, segment_id), highest revision wins, a final is
+    // never replaced by a partial, and a newer run clears the screen.
+    function acceptEvent(event) {
+      if (event.session_id !== sessionId || event.track !== track) return;
+      if (!showPartials && !event.is_final) return;
+      if (currentRun !== event.run_id) {
+        if (currentRun !== null && event.run_id < currentRun) return;
+        clearCaptions();
+        currentRun = event.run_id;
+      }
+      const key = `${event.run_id}:${event.track}:${event.segment_id}`;
+      const previous = events.get(key);
+      if (previous) {
+        if (previous.is_final && !event.is_final) return;
+        if (previous.is_final === event.is_final && event.revision <= previous.revision) return;
+      }
+      events.set(key, event);
+      for (const old of orderedEvents().slice(0, Math.max(0, events.size - MAX_EVENTS))) {
+        events.delete(`${old.run_id}:${old.track}:${old.segment_id}`);
+      }
+      renderCaptions();
+    }
+
+    function connect() {
+      const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const url = `${scheme}//${location.host}/ws/${encodeURIComponent(sessionId)}?tracks=${encodeURIComponent(track)}`;
+      const socket = new WebSocket(url);
+      socket.onmessage = message => {
+        let payload;
+        try { payload = JSON.parse(message.data); } catch { return; }
+        if (payload.type === 'subtitle' && payload.data) acceptEvent(payload.data);
+      };
+      // Keep the last captions on screen and retry; the gateway resends its recent finals.
+      socket.onclose = () => setTimeout(connect, RECONNECT_MS);
+    }
+
+    if (sessionId) connect();
+  </script>
+</body>
+</html>
