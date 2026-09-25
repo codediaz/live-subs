@@ -38,7 +38,7 @@ mocks de Gemini para dar por buena una tarea.
 **Propósito**: cerrar R2 (modelo traductor) y R4 (tiempos por enunciado) con datos reales antes de
 escribir la aplicación. R1 ya está cerrada en el pipeline A.
 
-- [ ] T000 [MANUAL] Dejar el material para T0:
+- [x] T000 [MANUAL] Dejar el material para T0:
   - 2–3 min de una charla real de Nerdearla en inglés en `samples/local/nerdearla_en.<ext>` (esa
     carpeta está en `.gitignore`);
   - `ffmpeg` instalado en la máquina (`sudo apt install ffmpeg`);
