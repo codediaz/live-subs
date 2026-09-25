@@ -48,6 +48,9 @@ def system_instruction(source_language: str, target_language: str) -> str:
     return (
         f"You translate live conference subtitles from {source} to {target}. "
         "Return only the translation of the sentence, with no quotes, notes or explanations. "
+        # RF-047: forced cuts close sentences mid-way.
+        "The sentence may be a fragment of a longer sentence: translate it as a fragment, "
+        "do not complete it and do not add content; use the previous sentences to understand it. "
         "Keep product names, code identifiers and technical terms that are usually left untranslated."
     )
 
