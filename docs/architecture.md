@@ -268,8 +268,8 @@ Mensajes del WebSocket: `{"type": "subtitle", "data": SubtitleEvent}` y `{"type"
 | `GEMINI_API_KEY`  | — | Credencial; solo la necesita el worker |
 | `REDIS_URL`  | `redis://redis:6379/0`  | Conexión a Redis |
 | `TRANSCRIBE_MODEL`  | `gemini-3.5-transcribe-live`  | Modelo de transcripción |
-| `TRANSLATE_MODEL`  | `gemini-3.8-flash` (la prueba técnica lo compara con `gemini-3.5-flash-lite`) | Modelo de traducción |
-| `TRANSLATE_THINKING_LEVEL`  | `LOW`  | Razonamiento del traductor: el mínimo que admite el modelo (`LOW` en 3.8 Flash, `MINIMAL` en 3.5 Flash-Lite) |
+| `TRANSLATE_MODEL`  | `gemini-3.5-flash-lite` (alternativa: `gemini-3.8-flash`; elegido en la prueba técnica) | Modelo de traducción |
+| `TRANSLATE_THINKING_LEVEL`  | `MINIMAL`  | Razonamiento del traductor: el mínimo que admite el modelo (`MINIMAL` en 3.5 Flash-Lite, `LOW` en 3.8 Flash) |
 | `TRANSLATE_TIMEOUT_S`  | `10`  | Límite por llamada de traducción |
 | `TRANSLATION_CONTEXT_SEGMENTS`  | `3`  | Frases previas enviadas como contexto |
 | `TRANSLATION_QUEUE_MAX`  | `10`  | Frases pendientes por pista antes de descartar la más antigua (§6.3.5) |
