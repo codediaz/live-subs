@@ -36,7 +36,6 @@ def test_env_example_matches_contract() -> None:
     assert {name: entries[name] for name in defaults} == defaults
 
     p1_defaults = {
-        "MAX_SEGMENT_MS": "6000",
         "HISTORY_MAX_EVENTS": "5000",
         "HISTORY_TTL_S": "86400",
     }

@@ -198,6 +198,9 @@ class TestWorkerSettings:
         assert settings.source_end_grace_ms == 3000
         assert settings.status_interval_s == 2
         assert settings.status_ttl_s == 15
+        assert settings.vad_end_sensitivity == "HIGH"
+        assert settings.vad_silence_ms == 300
+        assert settings.max_segment_ms == 8000
         assert settings.sessions_file == "sessions.yaml"
         assert settings.worker_sessions == ""
         assert settings.log_level == "INFO"
@@ -209,6 +212,14 @@ class TestWorkerSettings:
         assert settings.audio_chunk_ms == 50
         assert settings.translate_model == "gemini-3.8-flash"
         assert settings.translate_thinking_level == "LOW"
+
+    def test_reads_sentence_cut_overrides(self):
+        settings = WorkerSettings.from_env(
+            {"GEMINI_API_KEY": "k", "VAD_END_SENSITIVITY": "LOW", "VAD_SILENCE_MS": "500", "MAX_SEGMENT_MS": "6000"}
+        )
+        assert settings.vad_end_sensitivity == "LOW"
+        assert settings.vad_silence_ms == 500
+        assert settings.max_segment_ms == 6000
 
     def test_api_key_is_required(self):
         with pytest.raises(ConfigError, match="GEMINI_API_KEY"):
@@ -227,6 +238,10 @@ class TestWorkerSettings:
         with pytest.raises(ConfigError, match="TRANSLATE_THINKING_LEVEL"):
             WorkerSettings.from_env({"GEMINI_API_KEY": "k", "TRANSLATE_THINKING_LEVEL": "OFF"})
 
+    def test_invalid_vad_end_sensitivity_is_rejected(self):
+        with pytest.raises(ConfigError, match="VAD_END_SENSITIVITY"):
+            WorkerSettings.from_env({"GEMINI_API_KEY": "k", "VAD_END_SENSITIVITY": "MEDIUM"})
+
 
 class TestGatewaySettings:
     def test_has_no_api_key(self):
@@ -241,4 +256,8 @@ class TestGatewaySettings:
         assert settings.gateway_port == 8000
         assert settings.ws_ping_s == 20
         assert settings.ws_client_queue_max == 100
+        assert settings.recent_finals_n == 5
         assert settings.log_level == "INFO"
+
+    def test_reads_recent_finals_n(self):
+        assert GatewaySettings.from_env({"RECENT_FINALS_N": "0"}).recent_finals_n == 0
