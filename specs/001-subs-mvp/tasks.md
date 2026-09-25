@@ -506,7 +506,7 @@ paralelo: tocan archivos distintos. T053 va al final.
 
 **Gateway: últimas frases al conectarse**
 
-- [ ] T051 [P] [US1] Escribir `tests/test_recent_finals.py` antes de la implementación, para la clase
+- [x] T051 [P] [US1] Escribir `tests/test_recent_finals.py` antes de la implementación, para la clase
   pura `RecentFinals` de `src/subs/gateway/main.py`:
   - guarda como máximo `RECENT_FINALS_N` finales por `(session_id, track)`, en orden de llegada;
   - ignora parciales;
@@ -516,7 +516,7 @@ paralelo: tocan archivos distintos. T053 va al final.
   - **RF**: RF-048.
   - **Hecho cuando**: `pytest -q tests/test_recent_finals.py` falla solo por la implementación
     faltante.
-- [ ] T052 [US1] Implementar las últimas frases en `src/subs/gateway/main.py`:
+- [x] T052 [US1] Implementar las últimas frases en `src/subs/gateway/main.py`:
   - `RecentFinals`;
   - `EventDistributor` la actualiza con cada evento válido de `subs:*`;
   - al abrir el WebSocket, en un mismo paso sin `await` en el medio, se registra la cola del cliente
