@@ -335,7 +335,7 @@ traducciones vinculadas a su frase y la vista legible en celular.
 - [x] T030 [US1] Implementar las funciones puras de `src/subs/worker/translator.py`.
   - **RF**: RF-009, RF-010, RF-011, RF-012.
   - **Hecho cuando**: `pytest -q` en verde.
-- [ ] T031 [US1] Implementar la parte en ejecución de `src/subs/worker/translator.py` y conectarla en
+- [x] T031 [US1] Implementar la parte en ejecución de `src/subs/worker/translator.py` y conectarla en
   `src/subs/worker/main.py`:
   - una cola acotada (`TRANSLATION_QUEUE_MAX`, descarte del más antiguo con registro) y una tarea por
     pista, en orden dentro de cada pista;
