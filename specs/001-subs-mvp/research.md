@@ -35,10 +35,14 @@ técnica.
   - Su salida es solo audio (H5) y necesita una sesión por idioma destino.
   - No admite glosario en la traducción y está en preview.
 
-### R2. Modelo del traductor: `gemini-3.8-flash` con `LOW` frente a `gemini-3.5-flash-lite` con `MINIMAL` — **T0**
+### R2. Modelo del traductor: `gemini-3.8-flash` con `LOW` frente a `gemini-3.5-flash-lite` con `MINIMAL` — **cerrada**
 
-- **Decisión**: arrancar con `TRANSLATE_MODEL=gemini-3.8-flash` y `TRANSLATE_THINKING_LEVEL=LOW`
-  (valores de `AGENTS.md`). T0 compara ambos con las mismas frases.
+- **Resultado (T0, 2026-09-24)**: `TRANSLATE_MODEL=gemini-3.5-flash-lite` con
+  `TRANSLATE_THINKING_LEVEL=MINIMAL`. En T0 tuvo p50 de 638 ms frente a 1.533 ms de
+  `gemini-3.8-flash` con `LOW`. La alternativa es `gemini-3.8-flash` con `LOW`: se cambia solo por
+  configuración. Ver "Resultados de T0".
+- **Decisión inicial**: arrancar con `TRANSLATE_MODEL=gemini-3.8-flash` y
+  `TRANSLATE_THINKING_LEVEL=LOW` (valores de `AGENTS.md`). T0 compara ambos con las mismas frases.
 - **Regla de T0**: si `gemini-3.5-flash-lite` con `MINIMAL` tiene calidad media ≥ 4/5 y no más de
   1 error de término en las 10 frases evaluadas, y además es más rápido en p50, se cambia el valor por
   defecto en `.env.example`. Es un cambio de configuración, no de código.
@@ -56,8 +60,13 @@ técnica.
 - **Descartada**: dejar el nivel por defecto (`MEDIUM` en 3.8 Flash), que es más lento. También se
   descarta `thinking_budget=0`: el SDK lo marca como no soportado desde los modelos 3.5.
 
-### R4. Tiempos de cada frase (`start_ms`, `end_ms`) y latencia
+### R4. Tiempos de cada frase (`start_ms`, `end_ms`) y latencia — **cerrada**
 
+- **Resultado (T0, 2026-09-24)**: la Live API no entrega offsets. `input_transcription` e
+  `interim_input_transcription` solo traen `text` (`utterance_offsets_found: false`). Se usa el reloj
+  de audio con detección de voz por RMS. En T0, el fin de una racha de voz es el último bloque sobre
+  el umbral seguido de al menos 300 ms de silencio. Eso evita tomar como fin el comienzo de la frase
+  siguiente, y la implementación usa la misma regla.
 - **Decisión**: la ingesta mantiene un reloj de audio (§6.1.5). Si T0 confirma que la Live API trae
   offsets por enunciado, se usan para `start_ms` y `end_ms`. Si no, `end_ms` es el último bloque de
   audio con voz antes del final, detectado por energía (RMS sobre un umbral configurable), y
@@ -241,4 +250,62 @@ un bloque de 100 ms se calcula con la biblioteca estándar).
 
 ## Resultados de T0
 
-*Pendiente: se completa al ejecutar T0.*
+**Ejecución**: 2026-09-24, ~18:49–18:56 (hora local), dentro del límite de 60 min.
+
+- **Entrada**: `samples/local/nerdearla.mp3`, charla real de Nerdearla en inglés (local, no
+  versionada). Se enviaron 118,4 s de audio a ritmo real en bloques de 100 ms (1.185 bloques; el
+  envío tomó 123,7 s de reloj).
+- **Datos crudos**: `scripts/t0/out/live_20260924-184905_verbatim_s1.*` (1 sesión) y
+  `live_20260924-185404_verbatim_s2.*` (2 sesiones, 60 s).
+- **Configuración**: `gemini-3.5-transcribe-live`, `language_codes=[en]`, modo `VERBATIM`, VAD
+  automático, umbral RMS 500, silencio mínimo 300 ms.
+
+### Transcripción (`gemini-3.5-transcribe-live`)
+
+| Corrida | Parciales | Finales | Parcial p50 / p95 | Final p50 / p95 | Errores |
+| --- | --- | --- | --- | --- | --- |
+| 1 sesión, 118 s | 225 | 6 | 964 / 1.217 ms | 1.726 / 1.904 ms | 0 |
+| 2 sesiones, 60 s — sesión 0 | 113 | 4 | 876 / 1.084 ms | 1.817 / 2.053 ms | 0 |
+| 2 sesiones, 60 s — sesión 1 | 114 | 4 | 975 / 1.006 ms | 1.769 / 1.920 ms | 0 |
+
+- Parcial = inicio de voz → primer parcial. Final = fin de la racha de voz → final.
+- Contra los objetivos de §8: parcial p95 1,2 s (objetivo ≤ 1,5 s) y final p95 1,9 s (objetivo ≤ 3 s).
+  Es una muestra chica (n = 6 frases).
+- **Offsets por enunciado**: no hay. Los mensajes de transcripción no traen campos además de `text`
+  (R4).
+- **Dos sesiones simultáneas**: funcionan con la key, sin errores, y con latencias equivalentes a una
+  sola sesión.
+- **Frases finales muy largas**: 6 finales en 118 s, de 30, 18, 55, 2, 52 y 67 palabras, separadas
+  por 13–32 s. El VAD automático corta en pausas largas y este speaker casi no las hace. La latencia
+  "desde el fin de la frase" es buena, pero la pista traducida queda hasta ~30 s sin mostrar nada.
+
+### Traducción (EN → ES, mismas frases)
+
+Salieron 6 finales y 5 tenían ≥ 4 palabras, así que se tradujeron **5 frases**, no las 10 previstas.
+Cada una llevó como contexto el título y las 3 frases anteriores.
+
+| Modelo | `thinking_level` | p50 | p95 | Rango | Errores |
+| --- | --- | --- | --- | --- | --- |
+| `gemini-3.5-flash-lite` | `MINIMAL` | 638 ms | 911 ms | 566–911 ms | 0 |
+| `gemini-3.8-flash` | `LOW` | 1.533 ms | 1.877 ms | 1.024–1.877 ms | 0 |
+
+- Latencia estimada de la traducción en pantalla desde el fin de la frase (final p50 + traducción
+  p50): ~2,4 s con Flash-Lite y ~3,3 s con 3.8 Flash. Las dos cumplen el objetivo de ≤ 5 s de §8.
+- **Calidad**: las columnas `quality_1_5` y `term_errors` del CSV quedaron vacías. La elección de
+  Flash-Lite la tomó el usuario revisando las traducciones, sin puntajes registrados. La regla de R2
+  (calidad media ≥ 4/5) no quedó documentada con datos.
+- **Opcional `SMART` / `VERBATIM`**: no se ejecutó. R5 queda en `VERBATIM`.
+
+### Decisiones
+
+- **R2 cerrada**: `TRANSLATE_MODEL=gemini-3.5-flash-lite`, `TRANSLATE_THINKING_LEVEL=MINIMAL`.
+  Alternativa por configuración: `gemini-3.8-flash` con `LOW`.
+- **R4 cerrada**: sin offsets de la API; reloj de audio con detección de voz por RMS (fin de racha =
+  último bloque con voz seguido de ≥ 300 ms de silencio).
+
+### Consecuencia para P1
+
+**El corte forzado (`MAX_SEGMENT_MS`, §6.2.4) es la primera prioridad de P1.** Con este tipo de
+speaker hay pocas frases finales y muy largas (hasta 67 palabras y ~30 s). La traducción, que solo
+procesa finales, llega tarde para la audiencia aunque su latencia desde el fin de la frase sea baja.
+La verificación de `audio_stream_end` a mitad de frase (§14, punto 3) va junto con esa tarea.

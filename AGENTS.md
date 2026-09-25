@@ -59,7 +59,8 @@ pytest -q                         # test suite (must pass before marking a task 
 ## Gemini rules
 
 - Models come from env vars only: `TRANSCRIBE_MODEL=gemini-3.5-transcribe-live`,
-  `TRANSLATE_MODEL=gemini-3.8-flash`. Use exact model IDs, never `-latest` aliases.
+  `TRANSLATE_MODEL=gemini-3.5-flash-lite` with `TRANSLATE_THINKING_LEVEL=MINIMAL`
+  (alternative: `gemini-3.8-flash` with `LOW`). Use exact model IDs, never `-latest` aliases.
 - Audio goes only through the Live API as a continuous stream: 16-bit PCM, 16 kHz, mono,
   chunks of `AUDIO_CHUNK_MS`. **Never send audio chunks through REST calls.**
 - Translate **final** sentences only, never partials. Keep model reasoning/thinking at the minimum.
