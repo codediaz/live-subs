@@ -6,15 +6,20 @@
   <title>Live Subs — Audience</title>
   <style>
     :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #111827; color: #f9fafb; }
+    * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; }
-    main { width: min(100% - 2rem, 58rem); margin: 0 auto; padding: 2rem 0 4rem; }
+    main { width: min(calc(100% - 2rem), 58rem); margin: 0 auto; padding: 2rem 0 4rem; overflow-wrap: anywhere; }
     header { margin-bottom: 2rem; }
     h1 { margin: 0 0 .4rem; font-size: 1.8rem; }
     p { margin: .4rem 0; }
     .muted { color: #cbd5e1; }
     .controls { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1.5rem 0; }
-    label { display: grid; gap: .4rem; flex: 1 1 16rem; font-weight: 600; }
+    label { display: grid; gap: .4rem; flex: 1 1 16rem; min-width: 0; font-weight: 600; }
     select { width: 100%; padding: .7rem; border: 1px solid #94a3b8; border-radius: .4rem; background: #1f2937; color: #f9fafb; font: inherit; }
+    .size-controls { display: flex; align-items: center; gap: .6rem; margin: 1rem 0; }
+    .size-controls button { min-width: 3rem; min-height: 2.75rem; border: 1px solid #94a3b8; border-radius: .4rem; background: #334155; color: #f9fafb; font: inherit; font-weight: 700; cursor: pointer; }
+    .size-controls button:disabled { cursor: default; }
+    :focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
     .talk { border-top: 1px solid #475569; padding-top: 1rem; }
     #subtitles { display: grid; gap: .8rem; margin-top: 1.5rem; font-size: 1.65rem; line-height: 1.45; overflow-wrap: anywhere; }
     .line { margin: 0; padding: .45rem .75rem; border-left: 3px solid #60a5fa; background: #1f2937; }
@@ -35,6 +40,11 @@
         <select id="track" disabled></select>
       </label>
     </div>
+    <div class="size-controls" aria-label="Caption size">
+      <span>Caption size</span>
+      <button id="smaller" type="button" aria-label="Decrease caption size">A−</button>
+      <button id="larger" type="button" aria-label="Increase caption size">A+</button>
+    </div>
     <section class="talk" aria-label="Current talk">
       <h2 id="title">Choose a stage</h2>
       <p id="details" class="muted"></p>
@@ -49,11 +59,41 @@
     const details = document.getElementById('details');
     const connection = document.getElementById('connection');
     const subtitles = document.getElementById('subtitles');
+    const smaller = document.getElementById('smaller');
+    const larger = document.getElementById('larger');
+    const captionSizes = ['1.25rem', '1.65rem', '2.05rem', '2.45rem'];
+    const captionSizeKey = 'live-subs-caption-size';
+    let captionSizeIndex = 1;
     let sessions = [];
     let socket = null;
     let selectionVersion = 0;
     let currentRun = null;
     const events = new Map();
+
+    try {
+      const saved = localStorage.getItem(captionSizeKey);
+      const index = Number(saved);
+      if (saved !== null && Number.isInteger(index) && index >= 0 && index < captionSizes.length) {
+        captionSizeIndex = index;
+      }
+    } catch { /* Captions still work when browser storage is unavailable. */ }
+
+    function applyCaptionSize() {
+      subtitles.style.fontSize = captionSizes[captionSizeIndex];
+      smaller.disabled = captionSizeIndex === 0;
+      larger.disabled = captionSizeIndex === captionSizes.length - 1;
+    }
+
+    function changeCaptionSize(step) {
+      captionSizeIndex = Math.max(0, Math.min(captionSizes.length - 1, captionSizeIndex + step));
+      applyCaptionSize();
+      try { localStorage.setItem(captionSizeKey, String(captionSizeIndex)); }
+      catch { /* The chosen size remains active for this page. */ }
+    }
+
+    smaller.addEventListener('click', () => changeCaptionSize(-1));
+    larger.addEventListener('click', () => changeCaptionSize(1));
+    applyCaptionSize();
 
     function clearCaptions() {
       currentRun = null;
