@@ -16,6 +16,10 @@ Base: `docs/architecture.md` §7.6. El P0 implementa solo estas rutas:
 - Mensajes del servidor, como en §7.6:
   - `{"type": "subtitle", "data": SubtitleEvent}`;
   - `{"type": "ping"}` cada `WS_PING_S`.
+- Al conectarse a una o más pistas, el cliente recibe primero las últimas `RECENT_FINALS_N` frases
+  finales de la ejecución actual de cada pista pedida, en orden de llegada, como mensajes `subtitle`.
+  Después recibe los eventos en vivo. El gateway guarda estas frases solo en su memoria; cada
+  instancia nueva comienza sin frases guardadas. Con `RECENT_FINALS_N=0` no envía frases previas.
 - Si `session_id` no existe o una pista no es válida para ese escenario, el servidor cierra con el
   código 1008 y un motivo.
 - Los clientes no envían mensajes con efecto. Ningún parámetro acepta URLs ni rutas (RF-022).
