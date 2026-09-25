@@ -258,7 +258,7 @@ elegir `sala1` → `original` y ver parciales y finales (quickstart V2, paso 1).
   - `emitted_at_ms` se completa al publicar.
   - **RF**: RF-024, RF-025, RF-026, RF-036, RF-038.
   - **Hecho cuando**: se verifica en T024.
-- [ ] T024 [US1] Implementar `src/subs/worker/main.py` y `src/subs/worker/__main__.py`:
+- [x] T024 [US1] Implementar `src/subs/worker/main.py` y `src/subs/worker/__main__.py`:
   - supervisor de **un** escenario: `run_id` = epoch ms, ingesta → transcriptor → publicador;
   - estados `starting → live → stopped | error` (`data-model.md` §7);
   - `load_sessions` al arrancar: si falla, sale con código ≠ 0;
