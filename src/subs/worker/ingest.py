@@ -1,9 +1,21 @@
-"""Pure audio clock and PCM voice detection for worker ingestion."""
+"""Audio clock, PCM voice detection, and ffmpeg source ingestion."""
 
+import argparse
+import asyncio
+import logging
 import math
 import struct
+import time
 from collections import deque
 from dataclasses import dataclass
+
+from subs.common.config import SourceConfig, WorkerSettings
+from subs.common.queues import DropOldestQueue
+
+
+PCM_SAMPLE_RATE = 16_000
+PCM_BYTES_PER_SAMPLE = 2
+_LOGGER = logging.getLogger(__name__)
 
 
 def rms_pcm_s16le(pcm: bytes) -> float:
@@ -97,3 +109,101 @@ class AudioClock:
         """Measure final latency from the send time of the block at end_ms."""
         sent_at_ms = self.sent_at(end_ms)
         return None if sent_at_ms is None else emitted_at_ms - sent_at_ms
+
+
+class IngestError(RuntimeError):
+    """The audio source or ffmpeg failed."""
+
+
+async def ingest_audio(
+    source: SourceConfig,
+    audio_queue: DropOldestQueue[bytes],
+    *,
+    chunk_ms: int,
+    session_id: str,
+    seconds: float | None = None,
+) -> int:
+    """Convert one source to PCM and enqueue chunks without producer backpressure.
+
+    A file is read in real time. A stream supplies its own pacing. The caller owns
+    the queue and records AudioClock send times when it sends chunks to Live API.
+    """
+    if chunk_ms <= 0:
+        raise ValueError("chunk_ms must be positive")
+    if seconds is not None and seconds <= 0:
+        raise ValueError("seconds must be positive")
+
+    chunk_bytes = PCM_SAMPLE_RATE * PCM_BYTES_PER_SAMPLE * chunk_ms // 1000
+    if chunk_bytes <= 0:
+        raise ValueError("chunk_ms produces an empty PCM chunk")
+
+    command = ["ffmpeg", "-hide_banner", "-loglevel", "error"]
+    if source.type == "file":
+        command.append("-re")
+    command.extend(["-i", source.uri])
+    if seconds is not None:
+        command.extend(["-t", str(seconds)])
+    command.extend(
+        ["-vn", "-ac", "1", "-ar", str(PCM_SAMPLE_RATE), "-acodec", "pcm_s16le", "-f", "s16le", "pipe:1"]
+    )
+
+    process = await asyncio.create_subprocess_exec(
+        *command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    assert process.stdout is not None
+    chunk_count = 0
+    try:
+        while True:
+            try:
+                chunk = await process.stdout.readexactly(chunk_bytes)
+                ended = False
+            except asyncio.IncompleteReadError as exc:
+                chunk = exc.partial
+                ended = True
+
+            if chunk:
+                dropped = audio_queue.put_nowait(chunk)
+                chunk_count += 1
+                if dropped is not None:
+                    _LOGGER.warning(
+                        "audio_chunk_dropped",
+                        extra={"session_id": session_id, "dropped_chunks": audio_queue.dropped},
+                    )
+            if ended:
+                break
+
+        exit_code = await process.wait()
+        if exit_code != 0:
+            raise IngestError(f"ffmpeg exited with status {exit_code}")
+        return chunk_count
+    finally:
+        if process.returncode is None:
+            process.terminate()
+            await process.wait()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Read an audio source through ffmpeg at real-time pace")
+    parser.add_argument("uri", help="audio file to read")
+    parser.add_argument("--seconds", type=float, required=True, help="audio duration to read")
+    args = parser.parse_args()
+
+    settings = WorkerSettings.from_env()
+    audio_queue: DropOldestQueue[bytes] = DropOldestQueue(settings.audio_queue_max_chunks)
+    started = time.perf_counter()
+    count = asyncio.run(
+        ingest_audio(
+            SourceConfig(type="file", uri=args.uri),
+            audio_queue,
+            chunk_ms=settings.audio_chunk_ms,
+            session_id="diagnostic",
+            seconds=args.seconds,
+        )
+    )
+    print(f"chunks={count} elapsed_s={time.perf_counter() - started:.2f} dropped={audio_queue.dropped}")
+
+
+if __name__ == "__main__":
+    main()
