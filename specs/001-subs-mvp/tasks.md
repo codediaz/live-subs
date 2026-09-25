@@ -240,7 +240,7 @@ elegir `sala1` → `original` y ver parciales y finales (quickstart V2, paso 1).
 - [x] T021 [US1] Implementar `SegmentTracker` en `src/subs/worker/transcriber.py`.
   - **RF**: RF-006, RF-007, RF-037, RF-038.
   - **Hecho cuando**: `pytest -q` en verde.
-- [ ] T022 [US1] Implementar la sesión Live en `src/subs/worker/transcriber.py`:
+- [x] T022 [US1] Implementar la sesión Live en `src/subs/worker/transcriber.py`:
   - `client.aio.live.connect` con `TRANSCRIBE_MODEL`;
   - `input_audio_transcription` con `language_codes=[source_language]` y modo `VERBATIM` (o el que
     haya definido T001);
