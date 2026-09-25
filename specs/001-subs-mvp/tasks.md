@@ -215,7 +215,7 @@ elegir `sala1` → `original` y ver parciales y finales (quickstart V2, paso 1).
   igual se usa para `sent_at`.
   - **RF**: RF-005, RF-038.
   - **Hecho cuando**: `pytest -q` en verde.
-- [ ] T019 [US1] Implementar la ingesta en `src/subs/worker/ingest.py`:
+- [x] T019 [US1] Implementar la ingesta en `src/subs/worker/ingest.py`:
   - subproceso asíncrono `ffmpeg` que convierte a PCM s16le 16 kHz mono por `stdout`, con `-re` solo
     para `file`;
   - lectura en bloques de `AUDIO_CHUNK_MS`;
