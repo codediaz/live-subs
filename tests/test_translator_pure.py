@@ -72,6 +72,20 @@ class TestPrompt:
         assert "Spanish" in instruction
         assert "only the translation" in instruction
 
+    def test_system_instruction_treats_the_text_as_a_possible_fragment(self):
+        # RF-047: forced cuts (RF-046) close sentences mid-way; they must not be completed.
+        instruction = system_instruction("es", "en").lower()
+        assert "fragment of a longer sentence" in instruction
+        assert "translate it as a fragment" in instruction
+        assert "do not complete it" in instruction
+        assert "do not add content" in instruction
+        assert "previous sentences" in instruction
+
+    def test_prompt_keeps_previous_sentences_as_context_only(self):
+        prompt = build_prompt("Title", ["First."], "and then we")
+        assert "context only" in prompt
+        assert prompt.rstrip().endswith("and then we")
+
     def test_system_instruction_rejects_unknown_language(self):
         with pytest.raises(ValueError):
             system_instruction("en", "xx")
