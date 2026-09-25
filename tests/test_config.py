@@ -91,6 +91,19 @@ class TestLoadSessions:
         assert loaded[0].glossary == "samples/glossaries/sala1.yaml"
 
 
+def test_transcribe_vocabulary_parses_comma_separated_environment() -> None:
+    settings = WorkerSettings.from_env({
+        "GEMINI_API_KEY": "test-key",
+        "TRANSCRIBE_VOCABULARY": " Nerdearla, Konex , ,open source ",
+    })
+    assert settings.transcribe_vocabulary == ["Nerdearla", "Konex", "open source"]
+
+
+def test_transcribe_vocabulary_default() -> None:
+    settings = WorkerSettings.from_env({"GEMINI_API_KEY": "test-key"})
+    assert settings.transcribe_vocabulary == ["Nerdearla", "Konex", "Kubernetes", "Gemini", "open source"]
+
+
 class TestValidationRules:
     def test_id_is_required(self, base_dir):
         data = session()
