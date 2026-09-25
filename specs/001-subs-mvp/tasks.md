@@ -164,7 +164,7 @@ escribir la aplicación. R1 ya está cerrada en el pipeline A.
   `setup_logging(level)`).
   - **RF**: RF-034.
   - **Hecho cuando**: `pytest -q` en verde.
-- [ ] T015 Crear `sessions.yaml` por defecto según `contracts/sessions-yaml.md`:
+- [x] T015 Crear `sessions.yaml` por defecto según `contracts/sessions-yaml.md`:
   - `sala1`: `samples/audio/charla_en.ogg`, `source_language: en`, `target_languages: [es]`,
     `loop: true`;
   - `sala2`: `samples/audio/charla_es.ogg`, `source_language: es`, `target_languages: [en]`,
