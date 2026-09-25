@@ -58,6 +58,9 @@ class WorkerSettings(_EnvSettings):
     source_end_grace_ms: int = 3000
     status_interval_s: float = 2
     status_ttl_s: int = 15
+    vad_end_sensitivity: Literal["HIGH", "LOW"] = "HIGH"
+    vad_silence_ms: int = 300
+    max_segment_ms: int = 8000
     sessions_file: str = "sessions.yaml"
     worker_sessions: str = ""
     log_level: str = "INFO"
@@ -71,6 +74,7 @@ class GatewaySettings(_EnvSettings):
     gateway_port: int = 8000
     ws_ping_s: float = 20
     ws_client_queue_max: int = 100
+    recent_finals_n: int = 5
     log_level: str = "INFO"
 
 
