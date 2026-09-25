@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import sys
-from collections import defaultdict
+from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -22,11 +22,37 @@ _LOGGER = logging.getLogger(__name__)
 _INDEX = Path(__file__).parent / "static" / "index.html"
 
 
+class RecentFinals:
+    """Bounded final events from the latest run of each session and track."""
+
+    def __init__(self, max_events: int) -> None:
+        if max_events < 0:
+            raise ValueError("max_events must not be negative")
+        self.max_events = max_events
+        self._runs: dict[tuple[str, str], int] = {}
+        self._events: dict[tuple[str, str], deque[SubtitleEvent]] = {}
+
+    def add(self, event: SubtitleEvent) -> None:
+        key = (event.session_id, event.track)
+        run_id = self._runs.get(key)
+        if run_id is not None and event.run_id < run_id:
+            return
+        if run_id is None or event.run_id > run_id:
+            self._runs[key] = event.run_id
+            self._events.pop(key, None)
+        if event.is_final and self.max_events:
+            self._events.setdefault(key, deque(maxlen=self.max_events)).append(event)
+
+    def snapshot(self, session_id: str, track: str) -> list[SubtitleEvent]:
+        return list(self._events.get((session_id, track), ()))
+
+
 class EventDistributor:
     """One Redis pattern subscription, fanned out to bounded per-client queues."""
 
-    def __init__(self) -> None:
+    def __init__(self, recent_finals: RecentFinals) -> None:
         self.clients: dict[tuple[str, str], set[DropOldestQueue[str]]] = defaultdict(set)
+        self.recent_finals = recent_finals
 
     async def listen(self, pubsub: PubSub) -> None:
         try:
@@ -44,6 +70,7 @@ class EventDistributor:
                 if actual_channel != channel_name(event.session_id, event.track):
                     _LOGGER.warning("mismatched_subtitle_channel")
                     continue
+                self.recent_finals.add(event)
                 payload = '{"type":"subtitle","data":' + event.model_dump_json() + "}"
                 for queue in tuple(self.clients.get((event.session_id, event.track), ())):
                     if queue.put_nowait(payload) is not None:
@@ -62,7 +89,7 @@ def create_app(
 ) -> FastAPI:
     """Build the gateway with one Redis connection and the validated session list."""
     client = redis if redis is not None else Redis.from_url(settings.redis_url)
-    distributor = EventDistributor()
+    distributor = EventDistributor(RecentFinals(settings.recent_finals_n))
     by_id = {session.id: session for session in sessions}
 
     @asynccontextmanager
@@ -135,6 +162,10 @@ def create_app(
         subscriptions = {(session_id, track) for track in requested}
         for key in subscriptions:
             distributor.clients[key].add(queue)
+        for track in dict.fromkeys(requested):
+            for event in distributor.recent_finals.snapshot(session_id, track):
+                payload = '{"type":"subtitle","data":' + event.model_dump_json() + "}"
+                queue.put_nowait(payload)
         await websocket.accept()
         send_lock = asyncio.Lock()
 
