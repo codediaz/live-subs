@@ -48,6 +48,37 @@ class LiveSessionClosed(RuntimeError):
     """The Live API closed the session while audio was still being sent."""
 
 
+class _AudioGapDiscarder:
+    """Discard queued audio during a reconnection while advancing the run clock."""
+
+    def __init__(self, *, queue: DropOldestQueue[bytes], clock: AudioClock) -> None:
+        self.queue = queue
+        self.clock = clock
+        self.gap_ms = 0
+
+    def start(self) -> asyncio.Task[None]:
+        """Count and skip queued blocks synchronously, then discard new blocks until cancelled."""
+        while True:
+            try:
+                self.queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            self._skip_block()
+        return asyncio.create_task(self.run())
+
+    async def run(self) -> None:
+        while True:
+            try:
+                await asyncio.wait_for(self.queue.get(), timeout=_QUEUE_POLL_S)
+            except TimeoutError:
+                continue
+            self._skip_block()
+
+    def _skip_block(self) -> None:
+        self.clock.skip()
+        self.gap_ms += self.clock.chunk_ms
+
+
 class SegmentTracker:
     """Pure state machine for one run (data-model.md §5).
 
@@ -174,10 +205,12 @@ class _ConnectionDispatch:
         tracker: SegmentTracker,
         clock: AudioClock,
         on_event: Callable[[SubtitleEvent], Awaitable[None]],
+        on_cut: Callable[[], None] | None = None,
     ) -> None:
         self.tracker = tracker
         self.clock = clock
         self.on_event = on_event
+        self.on_cut = on_cut
         self.cut = False
         self.cut_at_ms: int | None = None
         self.cut_position_ms: int | None = None
@@ -193,6 +226,8 @@ class _ConnectionDispatch:
         self.empty_final = self.tracker.on_connection_cut(
             now_ms=self.cut_at_ms, position_ms=self.cut_position_ms
         )
+        if self.on_cut is not None:
+            self.on_cut()
         return self.empty_final
 
     async def deliver(self, content: types.LiveServerContent) -> None:
@@ -250,12 +285,37 @@ async def transcribe(
             )
         ),
     )
+    discarder: _AudioGapDiscarder | None = None
+    discard_task: asyncio.Task[None] | None = None
+    gap_ms = 0
+
+    def start_discarding() -> None:
+        nonlocal discarder, discard_task, gap_ms
+        if discard_task is None:
+            gap_ms = 0
+            discarder = _AudioGapDiscarder(queue=audio_queue, clock=clock)
+            discard_task = discarder.start()
+
+    async def stop_discarding() -> None:
+        nonlocal discarder, discard_task, gap_ms
+        if discard_task is None or discarder is None:
+            return
+        discard_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await discard_task
+        gap_ms = discarder.gap_ms
+        discard_task = None
+        discarder = None
+
     while True:
         connection_ready = False
-        dispatch = _ConnectionDispatch(tracker=tracker, clock=clock, on_event=on_event)
+        dispatch = _ConnectionDispatch(
+            tracker=tracker, clock=clock, on_event=on_event, on_cut=start_discarding
+        )
         try:
             async with client.aio.live.connect(model=model, config=config) as session:
                 connection_ready = True
+                await stop_discarding()
                 _LOGGER.info("live_session_open", extra={"session_id": session_id, "model": model})
 
                 async def send() -> None:
@@ -330,9 +390,14 @@ async def transcribe(
             return
         except (LiveSessionClosed, genai.errors.APIError, websockets.ConnectionClosed):
             if not connection_ready:
+                await stop_discarding()
                 raise  # Opening retries belong to T024; the first opening retains MVP behavior.
             dispatch.mark_cut()
             if dispatch.empty_final is not None:
                 await on_event(dispatch.empty_final)
             if source_done.is_set() and audio_queue.empty():
+                await stop_discarding()
                 return
+        except BaseException:
+            await stop_discarding()
+            raise

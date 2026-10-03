@@ -30,6 +30,10 @@ class DropOldestQueue[T]:
     async def get(self) -> T:
         return await self._queue.get()
 
+    def get_nowait(self) -> T:
+        """Remove and return an item immediately, raising QueueEmpty when no item is ready."""
+        return self._queue.get_nowait()
+
     def qsize(self) -> int:
         return self._queue.qsize()
 
