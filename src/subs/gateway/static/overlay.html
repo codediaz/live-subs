@@ -56,7 +56,8 @@
     }
 
     function renderCaptions() {
-      const text = orderedEvents().slice(-VISIBLE_EVENTS).map(event => event.text).join(' ');
+      const text = orderedEvents().filter(event => event.text !== '').slice(-VISIBLE_EVENTS)
+        .map(event => event.text).join(' ');
       captions.replaceChildren(document.createTextNode(text));
     }
 

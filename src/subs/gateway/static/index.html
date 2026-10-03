@@ -102,7 +102,7 @@
     }
 
     function renderCaptions() {
-      const lines = [...events.values()].sort((a, b) =>
+      const lines = [...events.values()].filter(event => event.text !== '').sort((a, b) =>
         a.start_ms - b.start_ms || a.segment_id - b.segment_id);
       subtitles.replaceChildren(...lines.map(event => {
         const line = document.createElement('p');

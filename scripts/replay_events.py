@@ -93,6 +93,49 @@ def first_run_events(session_id: str, language: str, run_id: int) -> list[Subtit
     ]
 
 
+def reconnection_events(session_id: str, language: str, run_id: int) -> list[SubtitleEvent]:
+    """Discard an open sentence and continue with a new sentence in the same run."""
+    if language == "en":
+        discarded_text, following_text = "This sentence is cut", "The talk continues."
+    elif language == "es":
+        discarded_text, following_text = "Esta frase se corta", "La charla continúa."
+    else:
+        raise ValueError(f"Unsupported source language: {language}")
+
+    partial = SubtitleEvent(
+        session_id=session_id,
+        run_id=run_id,
+        track=ORIGINAL_TRACK,
+        sequence=7,
+        segment_id=2,
+        revision=0,
+        kind="original",
+        lang=language,
+        text=discarded_text,
+        is_final=False,
+        start_ms=3200,
+        emitted_at_ms=0,
+        latency_ms=0,
+    )
+    empty_final = partial.model_copy(update={
+        "sequence": 8,
+        "revision": 1,
+        "text": "",
+        "is_final": True,
+        "end_ms": 3800,
+        "latency_ms": None,
+    })
+    late_partial = partial.model_copy(update={"sequence": 9})
+    following = partial.model_copy(update={
+        "sequence": 10,
+        "segment_id": 3,
+        "text": following_text,
+        "start_ms": 4000,
+    })
+    following_final = following.model_copy(update={"sequence": 11, "revision": 1, "is_final": True, "end_ms": 5000})
+    return [partial, empty_final, late_partial, following, following_final]
+
+
 def next_run_events(session_id: str, language: str, run_id: int) -> list[SubtitleEvent]:
     """A new run starts numbering and audio positions from zero."""
     if language == "en":
@@ -137,6 +180,11 @@ async def replay(session_id: str, language: str, redis_url: str) -> None:
             await redis.publish(channel_name(session_id, ORIGINAL_TRACK), published.model_dump_json())
             await asyncio.sleep(REPLAY_STEP_DELAY_S)
 
+        for event in reconnection_events(session_id, language, first_run_id):
+            published = event.model_copy(update={"emitted_at_ms": time.time_ns() // 1_000_000})
+            await redis.publish(channel_name(session_id, ORIGINAL_TRACK), published.model_dump_json())
+            await asyncio.sleep(REPLAY_STEP_DELAY_S)
+
         await asyncio.sleep(REPLAY_RUN_PAUSE_S)
         next_run_id = max(time.time_ns() // 1_000_000, first_run_id + 1)
         for event in next_run_events(session_id, language, next_run_id):
@@ -144,7 +192,7 @@ async def replay(session_id: str, language: str, redis_url: str) -> None:
             await redis.publish(channel_name(session_id, ORIGINAL_TRACK), published.model_dump_json())
             await asyncio.sleep(REPLAY_STEP_DELAY_S)
 
-    print(f"Replayed duplicate, reordered, final, and new-run events for {session_id}")
+    print(f"Replayed duplicate, reordered, reconnection, and new-run events for {session_id}")
 
 
 def main() -> None:

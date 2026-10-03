@@ -16,7 +16,7 @@ from redis.exceptions import RedisError
 from subs.common.config import ConfigError, GatewaySettings, SessionConfig, load_sessions
 from subs.common.logs import setup_logging
 from subs.common.queues import DropOldestQueue
-from subs.common.schema import SessionStatus, SubtitleEvent, channel_name
+from subs.common.schema import SessionStatus, SubtitleEvent, channel_name, is_empty_original_final
 
 _LOGGER = logging.getLogger(__name__)
 _INDEX = Path(__file__).parent / "static" / "index.html"
@@ -41,7 +41,7 @@ class RecentFinals:
         if run_id is None or event.run_id > run_id:
             self._runs[key] = event.run_id
             self._events.pop(key, None)
-        if event.is_final and self.max_events:
+        if event.is_final and not is_empty_original_final(event) and self.max_events:
             self._events.setdefault(key, deque(maxlen=self.max_events)).append(event)
 
     def snapshot(self, session_id: str, track: str) -> list[SubtitleEvent]:
