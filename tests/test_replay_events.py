@@ -3,10 +3,11 @@
 import runpy
 from pathlib import Path
 
-from subs.common.schema import SubtitleEvent
+from subs.common.schema import SubtitleEvent, is_empty_original_final
 
 SCRIPT = runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts/replay_events.py"))
 first_run_events = SCRIPT["first_run_events"]
+reconnection_events = SCRIPT["reconnection_events"]
 next_run_events = SCRIPT["next_run_events"]
 
 
@@ -40,3 +41,19 @@ def test_replay_uses_configured_source_language() -> None:
     assert all(event.lang == "es" for event in [*first, *second])
     assert first[4].text == "El despliegue está estable hoy."
     assert second[-1].text == "Empieza una charla nueva."
+
+
+def test_replay_reconnection_keeps_run_and_discards_open_sentence() -> None:
+    before = first_run_events("sala1", "en", 1000)
+    after = reconnection_events("sala1", "en", 1000)
+
+    assert all(SubtitleEvent.model_validate_json(event.model_dump_json()) == event for event in after)
+    assert {event.run_id for event in [*before, *after]} == {1000}
+    assert [event.sequence for event in after] == [7, 8, 9, 10, 11]
+    assert [event.segment_id for event in after] == [2, 2, 2, 3, 3]
+    assert not after[0].is_final
+    assert is_empty_original_final(after[1])
+    assert after[1].revision > after[0].revision
+    assert after[2].revision < after[1].revision
+    assert after[3].text == "The talk continues."
+    assert after[3].start_ms > after[1].end_ms

@@ -1,6 +1,7 @@
 """Recent final subtitle snapshots for newly connected clients (RF-048)."""
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 
 from subs.common.schema import SubtitleEvent, channel_name
@@ -54,6 +55,18 @@ def test_ignores_partials() -> None:
     recent.add(event(segment_id=2, is_final=False))
 
     assert recent.snapshot("sala1", "original") == [final]
+
+
+def test_empty_final_between_visible_finals_does_not_displace_them() -> None:
+    recent = gateway_main.RecentFinals(2)
+    first = event(segment_id=1)
+    empty = event(segment_id=2).model_copy(update={"text": "", "latency_ms": None})
+    second = event(segment_id=3)
+
+    for item in (first, empty, second):
+        recent.add(item)
+
+    assert recent.snapshot("sala1", "original") == [first, second]
 
 
 def test_newer_run_replaces_previous_finals_for_its_track() -> None:
@@ -116,3 +129,27 @@ def test_distributor_caches_only_valid_channel_events() -> None:
 
     assert recent.snapshot("sala1", "es") == [final]
     assert recent.snapshot("sala2", "es") == []
+
+
+def test_distributor_delivers_empty_final_live_without_caching_it() -> None:
+    empty = event().model_copy(update={"text": "", "latency_ms": None})
+
+    class PubSubMessages:
+        async def listen(self) -> AsyncIterator[dict[str, str]]:
+            yield {
+                "type": "pmessage",
+                "channel": channel_name(empty.session_id, empty.track),
+                "data": empty.model_dump_json(),
+            }
+
+    async def receive_live() -> str:
+        recent = gateway_main.RecentFinals(2)
+        distributor = gateway_main.EventDistributor(recent)
+        queue = gateway_main.DropOldestQueue[str](2)
+        distributor.clients[(empty.session_id, empty.track)].add(queue)
+        await distributor.listen(PubSubMessages())  # type: ignore[arg-type]
+        assert recent.snapshot(empty.session_id, empty.track) == []
+        return await queue.get()
+
+    payload = json.loads(asyncio.run(receive_live()))
+    assert payload == {"type": "subtitle", "data": empty.model_dump(mode="json")}
