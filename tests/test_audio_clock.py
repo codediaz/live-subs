@@ -77,3 +77,38 @@ def test_final_latency_uses_send_time_of_end_ms() -> None:
 
     assert clock.latency_ms(emitted_at_ms=1800, end_ms=100) == 700
     assert clock.latency_ms(emitted_at_ms=1800, end_ms=900) is None
+
+
+def test_skipped_blocks_advance_the_next_sent_position() -> None:
+    clock = AudioClock(chunk_ms=100, window_s=1, voice_rms_threshold=500)
+    first = clock.record(pcm(1000), sent_at_ms=1000)
+    clock.skip()
+    clock.skip()
+    following = clock.record(pcm(1000), sent_at_ms=1300)
+
+    assert first.position_ms == 0
+    assert following.position_ms == 300
+    assert clock.sent_at(100) is None
+    assert clock.sent_at(200) is None
+    assert clock.sent_at(300) == 1300
+
+
+def test_skipped_block_has_no_voice_or_silence_marker() -> None:
+    clock = AudioClock(chunk_ms=100, window_s=1, voice_rms_threshold=500)
+    clock.record(pcm(1000), sent_at_ms=1000)
+    clock.skip()
+    clock.record(pcm(0), sent_at_ms=1200)
+
+    assert clock.last_voiced_before(1200).position_ms == 0
+    assert clock.first_voiced_after(1000) is None
+    assert clock.last_completed_voice_end_before(1200, min_silence_ms=200) is None
+
+
+def test_skipped_block_has_no_latency_but_later_sent_block_does() -> None:
+    clock = AudioClock(chunk_ms=100, window_s=1, voice_rms_threshold=500)
+    clock.skip()
+    following = clock.record(pcm(1000), sent_at_ms=1500)
+
+    assert following.position_ms == 100
+    assert clock.latency_ms(emitted_at_ms=1800, end_ms=0) is None
+    assert clock.latency_ms(emitted_at_ms=1800, end_ms=100) == 300
