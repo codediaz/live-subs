@@ -20,8 +20,8 @@
 - [x] **T006** [US1] Añadir la operación de salto de bloque a `AudioClock` en `src/subs/worker/ingest.py`. **RF:** RF-011, RF-016. **Depende de:** T005. **Hecho cuando:** las pruebas del reloj y `pytest -q` pasan sin introducir bloque enviado ni voz para audio descartado.
 - [x] **T007** [US1] Escribir primero en `tests/test_segment_tracker.py` los casos de corte con y sin frase abierta, corte forzado pendiente, dos cortes consecutivos, final vacío y anclaje de la frase siguiente, según `data-model.md` §§6–7. **RF:** RF-012–RF-014. **Depende de:** T006. **Hecho cuando:** se demuestra el fallo esperado de cada caso nuevo y la suite existente sigue verde.
 - [x] **T008** [US1] Implementar el corte de conexión en `SegmentTracker`, en `src/subs/worker/transcriber.py`, manteniendo `run_id`, `sequence` y `segment_id` según `contracts/events.md`. **RF:** RF-012–RF-014. **Depende de:** T007. **Hecho cuando:** las pruebas del tracker pasan, el final vacío tiene `end_ms` del corte y `latency_ms=null`, y `pytest -q` pasa.
-- [ ] **T009** [US1] Escribir primero en `tests/test_schema.py` los casos del predicado de final original vacío y sus contraejemplos. **RF:** RF-014. **Depende de:** T008. **Hecho cuando:** el caso nuevo falla antes del código y la suite existente sigue verde.
-- [ ] **T010** [US1] Añadir el predicado en `src/subs/common/schema.py` sin cambiar los campos ni `schema_version` de `SubtitleEvent`. **RF:** RF-014. **Depende de:** T009. **Hecho cuando:** las pruebas del predicado y `pytest -q` pasan.
+- [x] **T009** [US1] Escribir primero en `tests/test_schema.py` los casos del predicado de final original vacío y sus contraejemplos. **RF:** RF-014. **Depende de:** T008. **Hecho cuando:** el caso nuevo falla antes del código y la suite existente sigue verde.
+- [x] **T010** [US1] Añadir el predicado en `src/subs/common/schema.py` sin cambiar los campos ni `schema_version` de `SubtitleEvent`. **RF:** RF-014. **Depende de:** T009. **Hecho cuando:** las pruebas del predicado y `pytest -q` pasan.
 
 ## Fase 3: Historia 1 — La charla continúa en una ejecución
 
