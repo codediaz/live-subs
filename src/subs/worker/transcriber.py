@@ -123,6 +123,19 @@ class SegmentTracker:
         self._previous_end_sent_at_ms = end_sent_at_ms
         return event
 
+    def on_connection_cut(self, *, now_ms: int, position_ms: int) -> SubtitleEvent | None:
+        """Discard an open sentence and anchor the next sentence after the connection cut."""
+        event = None
+        if self._open:
+            self._revision += 1
+            event = self._event("", is_final=True, end_ms=position_ms, now_ms=now_ms, latency_ms=None)
+            self._open = False
+            self.open_since_ms = None
+            self._segment_id += 1
+        self._previous_end_ms = position_ms
+        self._previous_end_sent_at_ms = now_ms
+        return event
+
     def _open_segment(self) -> None:
         onset = self.clock.first_voiced_after(self._previous_end_sent_at_ms)
         self._start_ms = self._previous_end_ms if onset is None else onset.position_ms
