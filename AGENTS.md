@@ -30,7 +30,7 @@ If these documents conflict, stop and ask. Never resolve a conflict silently.
 
 - Phases: `/speckit-specify` → `/speckit-clarify` → `/speckit-plan` → `/speckit-tasks` →
   `/speckit-analyze` → `/speckit-implement` → `/speckit-converge`.
-- One feature at a time, each on its own branch (`002-...`, `003-...`). Do not mix features.
+- One feature at a time, each on its own branch (e.g. `feat/<short-name>`). Do not mix features.
 - **Implement one task at a time.** Do only the requested task, run the tests, show the result,
   mark the task `[x]` in `tasks.md` and **stop**. Do not start the next task unasked.
 - Behavior changes go to the spec first. Show the spec diff before touching code.
