@@ -51,6 +51,11 @@ class AudioClock:
         self._blocks: deque[AudioBlock] = deque(maxlen=int(window_s * 1000 // chunk_ms))
         self._next_position_ms = 0
 
+    @property
+    def position_ms(self) -> int:
+        """Current audio position, including chunks skipped during a connection gap."""
+        return self._next_position_ms
+
     def record(self, pcm: bytes, *, sent_at_ms: int) -> AudioBlock:
         """Record a chunk when it is sent to the Live API, advancing the run clock."""
         block = AudioBlock(

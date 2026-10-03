@@ -165,6 +165,52 @@ class SegmentTracker:
         )
 
 
+class _ConnectionDispatch:
+    """Keep one Live connection's results behind its synchronous cut marker."""
+
+    def __init__(
+        self,
+        *,
+        tracker: SegmentTracker,
+        clock: AudioClock,
+        on_event: Callable[[SubtitleEvent], Awaitable[None]],
+    ) -> None:
+        self.tracker = tracker
+        self.clock = clock
+        self.on_event = on_event
+        self.cut = False
+        self.cut_at_ms: int | None = None
+        self.cut_position_ms: int | None = None
+        self.empty_final: SubtitleEvent | None = None
+
+    def mark_cut(self) -> SubtitleEvent | None:
+        """Freeze the cut instant before yielding to another connection task."""
+        if self.cut:
+            return None
+        self.cut = True
+        self.cut_at_ms = now_ms()
+        self.cut_position_ms = self.clock.position_ms
+        self.empty_final = self.tracker.on_connection_cut(
+            now_ms=self.cut_at_ms, position_ms=self.cut_position_ms
+        )
+        return self.empty_final
+
+    async def deliver(self, content: types.LiveServerContent) -> None:
+        """Ignore every result from this connection after its cut, including a late final."""
+        if self.cut:
+            return
+        if content.interim_input_transcription and content.interim_input_transcription.text:
+            event = self.tracker.on_interim(content.interim_input_transcription.text, now_ms=now_ms())
+            if event is not None:
+                await self.on_event(event)
+        if self.cut:
+            return
+        if content.input_transcription and content.input_transcription.text:
+            event = self.tracker.on_final(content.input_transcription.text, now_ms=now_ms())
+            if event is not None:
+                await self.on_event(event)
+
+
 async def transcribe(
     client: genai.Client,
     *,
@@ -206,6 +252,7 @@ async def transcribe(
     )
     while True:
         connection_ready = False
+        dispatch = _ConnectionDispatch(tracker=tracker, clock=clock, on_event=on_event)
         try:
             async with client.aio.live.connect(model=model, config=config) as session:
                 connection_ready = True
@@ -222,6 +269,7 @@ async def transcribe(
                         try:
                             await session.send_realtime_input(audio=types.Blob(data=chunk, mime_type=_AUDIO_MIME_TYPE))
                         except Exception as exc:
+                            dispatch.mark_cut()
                             raise LiveSessionClosed("Live API failed while sending audio") from exc
                         # Forced cut (RF-046): flush a sentence that stays open too long; audio keeps flowing.
                         open_since = tracker.open_since_ms
@@ -233,6 +281,7 @@ async def transcribe(
                             try:
                                 await session.send_realtime_input(audio_stream_end=True)
                             except Exception as exc:
+                                dispatch.mark_cut()
                                 raise LiveSessionClosed("Live API failed while ending the audio stream") from exc
                             last_cut = (open_since, cut_at)
                             _LOGGER.info("forced_cut", extra={"session_id": session_id})
@@ -247,20 +296,15 @@ async def transcribe(
                             except StopAsyncIteration:
                                 break
                             except Exception as exc:
+                                dispatch.mark_cut()
                                 raise LiveSessionClosed("Live API failed while receiving audio") from exc
                             received = True
                             content = message.server_content
                             if content is None:
                                 continue
-                            if content.interim_input_transcription and content.interim_input_transcription.text:
-                                event = tracker.on_interim(content.interim_input_transcription.text, now_ms=now_ms())
-                                if event is not None:
-                                    await on_event(event)
-                            if content.input_transcription and content.input_transcription.text:
-                                event = tracker.on_final(content.input_transcription.text, now_ms=now_ms())
-                                if event is not None:
-                                    await on_event(event)
+                            await dispatch.deliver(content)
                         if not received:
+                            dispatch.mark_cut()
                             raise LiveSessionClosed("Live API closed the transcription session")
 
                 sender = asyncio.create_task(send())
@@ -268,6 +312,7 @@ async def transcribe(
                 try:
                     done, _ = await asyncio.wait({sender, receiver}, return_when=asyncio.FIRST_COMPLETED)
                     if receiver in done:
+                        dispatch.mark_cut()
                         receiver.result()  # re-raises the session error
                         raise LiveSessionClosed("Live API closed the transcription session")
                     sender.result()
@@ -286,5 +331,8 @@ async def transcribe(
         except (LiveSessionClosed, genai.errors.APIError, websockets.ConnectionClosed):
             if not connection_ready:
                 raise  # Opening retries belong to T024; the first opening retains MVP behavior.
+            dispatch.mark_cut()
+            if dispatch.empty_final is not None:
+                await on_event(dispatch.empty_final)
             if source_done.is_set() and audio_queue.empty():
                 return
