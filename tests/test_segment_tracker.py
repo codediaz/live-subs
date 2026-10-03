@@ -6,7 +6,7 @@ import pytest
 
 from subs.common.schema import SubtitleEvent
 from subs.worker.ingest import AudioClock
-from subs.worker.transcriber import SegmentTracker
+from subs.worker.transcriber import SegmentTracker, should_force_cut
 
 T0 = 1_790_000_000_000  # wall-clock ms when the first chunk was sent
 CHUNK_MS = 100
@@ -142,3 +142,64 @@ class TestTimingFromAudioClock:
         final = tracker.on_final("Second", now_ms=at(3500))
         assert final.start_ms == 3000
         assert final.end_ms >= final.start_ms
+
+
+class TestConnectionCut:
+    def test_open_sentence_emits_empty_final_and_continues_identifiers(self, tracker: SegmentTracker) -> None:
+        first = tracker.on_interim("unfinished", now_ms=at(700))
+        second = tracker.on_interim("unfinished phrase", now_ms=at(1200))
+
+        cut = tracker.on_connection_cut(now_ms=at(2500), position_ms=2500)
+
+        assert isinstance(cut, SubtitleEvent)
+        assert (cut.session_id, cut.run_id, cut.track, cut.kind) == ("sala1", T0, "original", "original")
+        assert (cut.sequence, cut.segment_id, cut.revision) == (2, 0, 2)
+        assert cut.revision > second.revision
+        assert (cut.is_final, cut.text, cut.start_ms, cut.end_ms, cut.latency_ms) == (True, "", first.start_ms, 2500, None)
+        assert cut.emitted_at_ms == at(2500)
+        assert tracker.open_since_ms is None
+
+        following = tracker.on_interim("new sentence", now_ms=at(3600))
+        assert (following.run_id, following.sequence, following.segment_id, following.revision) == (T0, 3, 1, 0)
+        assert following.start_ms == 3000
+
+    def test_cut_without_open_sentence_emits_nothing_and_preserves_numbering(self, tracker: SegmentTracker) -> None:
+        assert tracker.on_connection_cut(now_ms=at(2500), position_ms=2500) is None
+
+        following = tracker.on_interim("new sentence", now_ms=at(3600))
+        assert (following.sequence, following.segment_id, following.revision) == (0, 0, 0)
+        assert following.start_ms == 3000
+
+    def test_cut_after_forced_signal_but_before_final_discards_open_sentence(self) -> None:
+        tracker = SegmentTracker(
+            session_id="sala1", run_id=T0, lang="en", clock=clock_with("v" * 100), min_silence_ms=300
+        )
+        partial = tracker.on_interim("still open", now_ms=at(700))
+        assert should_force_cut(open_since_ms=tracker.open_since_ms, last_cut_ms=None, now_ms=at(8700), max_segment_ms=8000)
+
+        cut = tracker.on_connection_cut(now_ms=at(8800), position_ms=8800)
+
+        assert (cut.sequence, cut.segment_id, cut.revision) == (partial.sequence + 1, partial.segment_id, 1)
+        assert (cut.is_final, cut.text, cut.start_ms, cut.end_ms, cut.latency_ms) == (True, "", partial.start_ms, 8800, None)
+
+    def test_two_cuts_do_not_reuse_segment_ids(self, tracker: SegmentTracker) -> None:
+        first = tracker.on_interim("first", now_ms=at(700))
+        first_cut = tracker.on_connection_cut(now_ms=at(2500), position_ms=2500)
+        second = tracker.on_interim("second", now_ms=at(3600))
+        second_cut = tracker.on_connection_cut(now_ms=at(4500), position_ms=4500)
+        assert tracker.on_connection_cut(now_ms=at(4600), position_ms=4600) is None
+        third = tracker.on_interim("third", now_ms=at(4800))
+
+        assert [event.sequence for event in (first, first_cut, second, second_cut, third)] == [0, 1, 2, 3, 4]
+        assert [event.segment_id for event in (first, first_cut, second, second_cut, third)] == [0, 0, 1, 1, 2]
+        assert (second.revision, third.revision) == (0, 0)
+
+    def test_cut_after_final_anchors_next_start_after_the_cut(self, tracker: SegmentTracker) -> None:
+        tracker.on_interim("complete", now_ms=at(700))
+        final = tracker.on_final("Complete.", now_ms=at(2900))
+        assert tracker.on_connection_cut(now_ms=at(3200), position_ms=3200) is None
+
+        following = tracker.on_interim("after cut", now_ms=at(3600))
+        assert (following.sequence, following.segment_id) == (final.sequence + 1, final.segment_id + 1)
+        assert following.start_ms == 3300
+        assert following.start_ms >= 3200
