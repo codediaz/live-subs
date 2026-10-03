@@ -294,14 +294,45 @@ regla, o se cumplieron los 30 min (en ese caso se registra lo medido y se consul
 
 ## Resultados del probe
 
-*(Se completa al ejecutar T0R.)*
+**Ejecución principal:** 2026-10-03 UTC, `.venv/bin/python scripts/t0/reconnect_probe.py`, con acceso
+a Gemini Live. Configuración tomada de `.env` mediante `WorkerSettings`: modelo
+`gemini-3.5-transcribe-live`, idioma `en`, vocabulario `Nerdearla, Konex, Kubernetes, Gemini, open source`,
+modo `VERBATIM`, VAD `HIGH`/300 ms, corte forzado `MAX_SEGMENT_MS=8000`, PCM mono 16 kHz en bloques de
+100 ms. `ffmpeg -re` transmitió `samples/audio/charla_en.ogg` (135,4 s). Se hicieron 10 aperturas sin
+audio y después dos cortes propios, en 60,0 y 120,0 s de audio. Evidencia cruda sin editar:
+`scripts/t0/out/reconnect_20261003-013059.jsonl`; análisis derivado:
+`scripts/t0/out/reconnect_20261003-013059.corrected.summary.json`.
 
 | Medida | Valor | Decisión |
 | --- | --- | --- |
-| Apertura p50 / p95 / máx. (ms) | — | — |
-| Cierre (ms) | — | — |
-| Relevo: detección → lista (ms), por relevo | — | — |
-| Relevo: audio descartado (ms), por relevo | — | — |
-| Primer parcial / primer final tras el relevo (ms) | — | — |
-| Resultados tardíos de la conexión vieja | — | — |
-| Cierre real (opcional): instante, código, `go_away` | — | — |
+| Apertura p50 / p95 / máx. (ms) | 484,409 / 840,720 / 840,720; 10/10 aperturas listas | Ver reglas 1 y 2 |
+| Cierre (ms) | 10 cierres: mínimo 103,289; máximo 131,689 | Medido |
+| Relevo: detección → lista (ms), por relevo | 600 y 600; 2/2 conexiones nuevas listas | Regla 4: PASS |
+| Relevo: audio descartado (ms), por relevo | 600 y 600; no se reenvió | Medido |
+| Primer parcial / primer final tras la conexión lista (ms) | Relevo 1: 975 / 9406; relevo 2: 2023 / 10533 | Ambos entregaron parciales y finales |
+| Latencia del primer final desde fin de frase (ms) | 406 y 433, desde el último bloque con voz en el corte forzado que cerró cada frase | Regla 3: PASS |
+| Resultados tardíos de la conexión vieja | 0 observados después de marcar el corte | R4 se mantiene como defensa |
+| Cierre real (opcional): instante, código, `go_away` | No ejecutado: requería una conexión de 11 min | Sin decisión sobre el cierre real |
+
+| Regla de T0R | Evidencia medida | Condición | Decisión y motivo |
+| --- | --- | --- | --- |
+| 1. p95 de apertura | 840,720 ms entre 10 aperturas | ≤ 1500 ms | **PASS**: menor que el límite |
+| 2. Apertura máxima | 840,720 ms | < 5000 ms (`RECONNECT_ATTEMPT_TIMEOUT_S`/2) | **PASS**: menor que el límite |
+| 3. Primer final tras el relevo | 406 y 433 ms desde el último bloque con voz anterior al corte forzado; finales a 9406 y 10533 ms desde conexión lista | ≤ 3000 ms desde fin de frase (`docs/architecture.md` §8, original final) | **PASS**: ambos finales llegaron dentro del límite medido desde fin de frase |
+| 4. Relevo inmediato | Ambos cortes iniciaron la apertura siguiente sin espera; conexiones listas en 600 y 600 ms; 0 fallos de apertura | La apertura inmediata funciona tras cada cierre propio | **PASS**: los dos relevos terminaron con una conexión lista y transcripción nueva |
+
+**Continuidad y límites de interpretación:** los primeros finales de las conexiones nuevas incluyen
+«lesson was about observability» y «Start with one critical journey», pasajes presentes en
+`samples/audio/charla_en.txt`; no se observó falta de transcripción al comenzar la sesión nueva. El
+texto perdido en el corte no se cuantificó palabra por palabra. La latencia del final se calculó desde
+el último bloque con voz hasta el corte forzado de esa frase, no desde la apertura ni desde el último
+audio enviado al recibir el final. El probe no mide la pantalla, las traducciones ni el cierre real del
+servidor a ~10 min.
+
+Se conservaron además dos corridas previas sin alterar: `reconnect_20261003-012351.jsonl` (sin acceso
+de red: 0/10 aperturas, un error DNS y después tiempos agotados) y
+`reconnect_20261003-012715.jsonl` (red disponible, pero sin el corte forzado del worker: el segundo
+relevo produjo parciales y no un final antes de terminar el clip). Sus resúmenes originales siguen en
+`scripts/t0/out/`; los archivos `*.corrected.summary.json` documentan el recálculo de latencia a
+partir de los JSONL crudos. Las cuatro decisiones anteriores usan la ejecución principal, que reproduce
+el corte forzado existente del worker.
