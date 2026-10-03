@@ -22,6 +22,18 @@ def now_ms() -> int:
     return time.time_ns() // 1_000_000
 
 
+def reconnect_delay_ms(*, attempt: int, initial_ms: int, max_ms: int) -> int:
+    """Wait before a reconnection attempt, starting immediately and then doubling up to the cap."""
+    if attempt == 1:
+        return 0
+    return min(initial_ms * 2 ** (attempt - 2), max_ms)
+
+
+def should_retry_reconnect(*, failures: int, max_attempts: int) -> bool:
+    """Continue only while this reconnection has attempts remaining."""
+    return failures < max_attempts
+
+
 def should_force_cut(*, open_since_ms: int | None, last_cut_ms: int | None, now_ms: int, max_segment_ms: int) -> bool:
     """Forced cut rule (RF-046): cut a sentence open for max_segment_ms since its first partial,
     and again every max_segment_ms after the previous cut while it stays open."""
