@@ -37,6 +37,11 @@ class SubtitleEvent(BaseModel):
         return self
 
 
+def is_empty_original_final(event: SubtitleEvent) -> bool:
+    """Identify an empty final that closes a discarded original sentence."""
+    return event.kind == "original" and event.is_final and event.text == ""
+
+
 class SessionStatus(BaseModel):
     session_id: str
     state: Literal["starting", "live", "reconnecting", "stopped", "error"]
