@@ -3,6 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
+import subs.common.schema as schema
 from subs.common.schema import SessionStatus, SubtitleEvent, channel_name
 
 ARCHITECTURE_EXAMPLE = """
@@ -131,3 +132,27 @@ class TestSessionStatus:
 def test_channel_name():
     assert channel_name("sala1", "es") == "subs:sala1:es"
     assert channel_name("sala2", "original") == "subs:sala2:original"
+
+
+class TestEmptyOriginalFinal:
+    def test_recognizes_reconnection_empty_final(self) -> None:
+        event = make_event(text="", is_final=True, end_ms=2500, latency_ms=None)
+
+        assert event.schema_version == 1
+        assert schema.is_empty_original_final(event)
+
+    def test_does_not_recognize_empty_original_partial(self) -> None:
+        event = make_event(text="", is_final=False)
+
+        assert not schema.is_empty_original_final(event)
+
+    def test_does_not_recognize_empty_translation_final(self) -> None:
+        event = make_event(kind="translation", track="es", lang="es", text="", is_final=True, end_ms=2500)
+
+        assert not schema.is_empty_original_final(event)
+
+    @pytest.mark.parametrize("text", ["a sentence", " "])
+    def test_does_not_recognize_original_final_with_text(self, text: str) -> None:
+        event = make_event(text=text, is_final=True, end_ms=2500)
+
+        assert not schema.is_empty_original_final(event)
