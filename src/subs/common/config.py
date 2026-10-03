@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal, Self
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, ValidationInfo, field_validator
 
 from subs.common.schema import ORIGINAL_TRACK
 
@@ -64,6 +64,11 @@ class WorkerSettings(_EnvSettings):
     vad_end_sensitivity: Literal["HIGH", "LOW"] = "HIGH"
     vad_silence_ms: int = 300
     max_segment_ms: int = 8000
+    reconnect_max_attempts: int = Field(default=5, ge=1)
+    reconnect_backoff_initial_ms: int = Field(default=500, ge=100)
+    reconnect_backoff_max_ms: int = 8000
+    reconnect_attempt_timeout_s: float = Field(default=10, ge=1, le=120)
+    live_session_max_s: int | None = Field(default=None, ge=1)
     sessions_file: str = "sessions.yaml"
     worker_sessions: str = ""
     log_level: str = "INFO"
@@ -73,6 +78,14 @@ class WorkerSettings(_EnvSettings):
     def parse_transcribe_vocabulary(cls, value: str | list[str]) -> list[str]:
         if isinstance(value, str):
             return [term.strip() for term in value.split(",") if term.strip()]
+        return value
+
+    @field_validator("reconnect_backoff_max_ms")
+    @classmethod
+    def validate_reconnect_backoff_max_ms(cls, value: int, info: ValidationInfo) -> int:
+        initial = info.data.get("reconnect_backoff_initial_ms")
+        if initial is not None and value < initial:
+            raise ValueError("must be at least RECONNECT_BACKOFF_INITIAL_MS")
         return value
 
 
