@@ -256,6 +256,89 @@ class TestWorkerSettings:
             WorkerSettings.from_env({"GEMINI_API_KEY": "k", "VAD_END_SENSITIVITY": "MEDIUM"})
 
 
+class TestReconnectSettings:
+    def test_defaults_from_002_contract(self) -> None:
+        settings = WorkerSettings.from_env({"GEMINI_API_KEY": "k"})
+        assert settings.reconnect_max_attempts == 5
+        assert settings.reconnect_backoff_initial_ms == 500
+        assert settings.reconnect_backoff_max_ms == 8000
+        assert settings.reconnect_attempt_timeout_s == 10
+        assert settings.live_session_max_s is None
+
+    def test_empty_values_use_defaults(self) -> None:
+        settings = WorkerSettings.from_env({
+            "GEMINI_API_KEY": "k",
+            "RECONNECT_MAX_ATTEMPTS": "",
+            "RECONNECT_BACKOFF_INITIAL_MS": "",
+            "RECONNECT_BACKOFF_MAX_MS": "",
+            "RECONNECT_ATTEMPT_TIMEOUT_S": "",
+            "LIVE_SESSION_MAX_S": "",
+        })
+        assert settings.reconnect_max_attempts == 5
+        assert settings.reconnect_backoff_initial_ms == 500
+        assert settings.reconnect_backoff_max_ms == 8000
+        assert settings.reconnect_attempt_timeout_s == 10
+        assert settings.live_session_max_s is None
+
+    def test_lower_bound_overrides_are_accepted(self) -> None:
+        settings = WorkerSettings.from_env({
+            "GEMINI_API_KEY": "k",
+            "RECONNECT_MAX_ATTEMPTS": "1",
+            "RECONNECT_BACKOFF_INITIAL_MS": "100",
+            "RECONNECT_BACKOFF_MAX_MS": "100",
+            "RECONNECT_ATTEMPT_TIMEOUT_S": "1",
+            "LIVE_SESSION_MAX_S": "1",
+        })
+        assert settings.reconnect_max_attempts == 1
+        assert settings.reconnect_backoff_initial_ms == 100
+        assert settings.reconnect_backoff_max_ms == 100
+        assert settings.reconnect_attempt_timeout_s == 1
+        assert settings.live_session_max_s == 1
+
+    def test_upper_timeout_and_other_overrides_are_accepted(self) -> None:
+        settings = WorkerSettings.from_env({
+            "GEMINI_API_KEY": "k",
+            "RECONNECT_MAX_ATTEMPTS": "3",
+            "RECONNECT_BACKOFF_INITIAL_MS": "250",
+            "RECONNECT_BACKOFF_MAX_MS": "1000",
+            "RECONNECT_ATTEMPT_TIMEOUT_S": "120",
+            "LIVE_SESSION_MAX_S": "60",
+        })
+        assert settings.reconnect_max_attempts == 3
+        assert settings.reconnect_backoff_initial_ms == 250
+        assert settings.reconnect_backoff_max_ms == 1000
+        assert settings.reconnect_attempt_timeout_s == 120
+        assert settings.live_session_max_s == 60
+
+    @pytest.mark.parametrize("value", ["0", "-1", "1.5", "invalid"])
+    def test_invalid_max_attempts_names_variable(self, value: str) -> None:
+        with pytest.raises(ConfigError, match="RECONNECT_MAX_ATTEMPTS"):
+            WorkerSettings.from_env({"GEMINI_API_KEY": "k", "RECONNECT_MAX_ATTEMPTS": value})
+
+    @pytest.mark.parametrize("value", ["0", "99", "-1", "100.5", "invalid"])
+    def test_invalid_initial_backoff_names_variable(self, value: str) -> None:
+        with pytest.raises(ConfigError, match="RECONNECT_BACKOFF_INITIAL_MS"):
+            WorkerSettings.from_env({"GEMINI_API_KEY": "k", "RECONNECT_BACKOFF_INITIAL_MS": value})
+
+    def test_max_backoff_below_initial_names_max_variable(self) -> None:
+        with pytest.raises(ConfigError, match="RECONNECT_BACKOFF_MAX_MS"):
+            WorkerSettings.from_env({
+                "GEMINI_API_KEY": "k",
+                "RECONNECT_BACKOFF_INITIAL_MS": "500",
+                "RECONNECT_BACKOFF_MAX_MS": "200",
+            })
+
+    @pytest.mark.parametrize("value", ["0.5", "121", "invalid"])
+    def test_invalid_attempt_timeout_names_variable(self, value: str) -> None:
+        with pytest.raises(ConfigError, match="RECONNECT_ATTEMPT_TIMEOUT_S"):
+            WorkerSettings.from_env({"GEMINI_API_KEY": "k", "RECONNECT_ATTEMPT_TIMEOUT_S": value})
+
+    @pytest.mark.parametrize("value", ["0", "-1", "1.5", "invalid"])
+    def test_invalid_live_session_max_names_variable(self, value: str) -> None:
+        with pytest.raises(ConfigError, match="LIVE_SESSION_MAX_S"):
+            WorkerSettings.from_env({"GEMINI_API_KEY": "k", "LIVE_SESSION_MAX_S": value})
+
+
 class TestGatewaySettings:
     def test_has_no_api_key(self):
         assert "gemini_api_key" not in GatewaySettings.model_fields
