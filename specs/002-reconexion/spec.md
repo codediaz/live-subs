@@ -166,7 +166,7 @@ Formato EARS: *El sistema deberá…* (siempre), *Cuando…* (evento), *Mientras
   reconexión por exitosa y volver a cero la cuenta de intentos fallidos.
 - **RF-006**: Donde el operador configure la cantidad máxima de intentos (`RECONNECT_MAX_ATTEMPTS`, un
   entero mayor o igual a 1, por defecto 5), la espera inicial entre intentos
-  (`RECONNECT_BACKOFF_INITIAL_MS`, mayor o igual a 100, por defecto 500) y la espera máxima
+  (`RECONNECT_BACKOFF_INITIAL_MS`, un entero mayor o igual a 100, por defecto 500) y la espera máxima
   (`RECONNECT_BACKOFF_MAX_MS`, mayor o igual que la espera inicial, por defecto 8000), el sistema deberá
   usar esos valores, duplicando la espera en cada intento sucesivo hasta llegar al máximo; sin
   configuración, deberá usar los valores por defecto. Si alguno de estos valores no cumple su
@@ -229,7 +229,10 @@ Formato EARS: *El sistema deberá…* (siempre), *Cuando…* (evento), *Mientras
 - **RF-020**: El sistema deberá registrar en los logs, con el identificador del escenario y sin audio ni
   texto de subtítulos en nivel INFO, un evento `reconnect_started` al detectar el cierre, un evento
   `reconnect_attempt_failed` por cada intento fallido, un evento `reconnect_succeeded` cuando la
-  reconexión tiene éxito y un evento `reconnect_abandoned` cuando se agotan los intentos.
+  reconexión tiene éxito y un evento `reconnect_abandoned` cuando se agotan los intentos. También deberá
+  registrar `reconnect_cancelled` en nivel INFO si la fuente termina durante la reconexión y
+  `live_go_away` en nivel DEBUG si el servidor avisa que va a cerrar; ese aviso no anticipa la
+  reconexión.
 
 **Aislamiento**
 
@@ -242,9 +245,11 @@ Formato EARS: *El sistema deberá…* (siempre), *Cuando…* (evento), *Mientras
 
 **Prueba**
 
-- **RF-023**: Donde se configure `LIVE_SESSION_MAX_S` (vacío por defecto), el sistema deberá cerrar a
-  propósito cada conexión de transcripción a los N segundos de abierta, para probar la reconexión sin
-  esperar el límite real; ese cierre se trata como cualquier otro (RF-001).
+- **RF-023**: `LIVE_SESSION_MAX_S` deberá aceptar un valor vacío o no definido (sin cierre provocado), o
+  un entero mayor o igual a 1. Cuando se configure ese entero N, el sistema deberá cerrar a propósito
+  cada conexión de transcripción a los N segundos de abierta, para probar la reconexión sin esperar el
+  límite real; ese cierre se trata como cualquier otro (RF-001). Si el valor no cumple la condición, el
+  worker no deberá arrancar e indicará `LIVE_SESSION_MAX_S` en el error, igual que en RF-006.
 
 ### Entidades clave
 

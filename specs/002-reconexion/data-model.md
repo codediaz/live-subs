@@ -14,7 +14,7 @@ Variables, valores por defecto y rangos en [contracts/env.md](contracts/env.md).
 | Grupo | Campos | Reglas |
 | --- | --- | --- |
 | Reintentos | `reconnect_max_attempts`, `reconnect_backoff_initial_ms`, `reconnect_backoff_max_ms`, `reconnect_attempt_timeout_s` | Rangos de RF-006 y RF-007; `backoff_max ≥ backoff_initial`, con un error que nombra `RECONNECT_BACKOFF_MAX_MS` |
-| Prueba | `live_session_max_s` | Vacío = sin cierre a propósito; con valor, entero ≥ 1 (R13, pendiente de pasar a la spec) |
+| Prueba | `live_session_max_s` | Vacío o no definido = sin cierre a propósito; con valor, entero ≥ 1 (RF-023, R13) |
 
 ## 2. Política de reintento (Δ, funciones puras)
 

@@ -126,9 +126,13 @@ Se agregan a `spec.md` dos precisiones que surgieron del plan. Se muestra el dif
 
 - RF-023: rango de `LIVE_SESSION_MAX_S` (vacío o entero ≥ 1; si no, el worker no arranca, como RF-006)
   (R13);
-- RF-020: los eventos opcionales `reconnect_cancelled` (la fuente terminó durante la reconexión) y
-  `live_go_away` (DEBUG), que no cambian el comportamiento
+- RF-020: los eventos adicionales `reconnect_cancelled` (INFO, si la fuente termina durante la
+  reconexión) y `live_go_away` (DEBUG, al recibir el aviso del servidor, sin anticipar el cierre),
+  que no cambian el comportamiento
   ([contracts/reconnect-observability.md](contracts/reconnect-observability.md)).
+
+La decisión aprobada para RF-006 fija `RECONNECT_BACKOFF_INITIAL_MS` como entero ≥ 100, con valor por
+defecto 500; `contracts/env.md` y la prueba de configuración usan ese mismo límite.
 
 ### T0R: probe de reconexión (descartable, máximo 30 min)
 
@@ -239,7 +243,7 @@ Todos los RF (RF-001 a RF-023) quedan cubiertos por al menos un módulo de `src/
 | Archivo | Qué prueba | RF |
 | --- | --- | --- |
 | `test_reconnect_policy.py` (+) | **Cálculo de esperas**: 0 ms antes del primer intento; 500, 1000, 2000, 4000 con los valores por defecto; se duplica hasta el tope y nunca lo supera; secuencia no decreciente; con inicial = máximo, todas las esperas iguales. **Decisión de reintento**: reintenta mientras fallos < máximo; abandona al llegar al máximo; con máximo = 1, abandona al primer fallo; una cuenta nueva (después de un éxito) vuelve a empezar sin espera | RF-002, RF-003, RF-004, RF-005, RF-006 |
-| `test_config.py` | **Validación de configuración**: valores por defecto de las cinco variables; vacías = por defecto; límites inferiores y superiores aceptados y rechazados (`RECONNECT_MAX_ATTEMPTS` 0, `RECONNECT_BACKOFF_INITIAL_MS` 99, `RECONNECT_ATTEMPT_TIMEOUT_S` 0,5 y 121, `LIVE_SESSION_MAX_S` 0 o no entero); máximo < inicial rechazado con un mensaje que nombra `RECONNECT_BACKOFF_MAX_MS` | RF-006, RF-007, RF-023 |
+| `test_config.py` | **Validación de configuración**: valores por defecto de las cinco variables; vacías = por defecto; límites inferiores y superiores aceptados y rechazados (`RECONNECT_MAX_ATTEMPTS` 0, `RECONNECT_BACKOFF_INITIAL_MS` entero 100 aceptado, 99 rechazado y 500 por defecto, `RECONNECT_ATTEMPT_TIMEOUT_S` 0,5 y 121, `LIVE_SESSION_MAX_S` 0 o no entero); máximo < inicial rechazado con un mensaje que nombra `RECONNECT_BACKOFF_MAX_MS` | RF-006, RF-007, RF-023 |
 | `test_segment_tracker.py` | **Final vacío**: corte con frase abierta → final con `text=""`, mismo `segment_id` y `start_ms`, `end_ms` = posición del corte, `revision` mayor que la del último parcial, `latency_ms` nulo; `segment_id` avanza y `sequence` sigue. Corte sin frase abierta → nada y numeración igual. Corte tras un corte forzado sin final → se descarta igual. La frase siguiente empieza en un bloque enviado después del corte (nunca antes) y su `revision` arranca en 0. Dos cortes seguidos no repiten `segment_id` | RF-012, RF-013, RF-014, CE-004 |
 | `test_audio_clock.py` | Saltar un bloque avanza la posición sin hora de envío ni voz; el bloque registrado después queda en la posición real; la latencia de §8 y la búsqueda de voz o silencio ignoran lo saltado | RF-011, RF-016 |
 | `test_scenario_state.py` (+) | `reconnecting` no se pisa con la regla `starting → live`; éxito → `live` y `reconnects + 1`; fallo → `errors + 1` y `last_error`; `last_error` se conserva tras un éxito; `reconnects` no vuelve a 0 entre vueltas; el abandono no suma otro error | RF-017, RF-018, RF-019, RF-004 |

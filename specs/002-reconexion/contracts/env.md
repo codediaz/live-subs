@@ -11,7 +11,7 @@ lista solo las variables que agrega la feature (**Δ**). Las recibe solo el work
 | **Δ** `RECONNECT_BACKOFF_INITIAL_MS` | `500` | worker | Espera antes del segundo intento; se duplica en cada intento siguiente. Entero ≥ 100 (RF-003, RF-006) |
 | **Δ** `RECONNECT_BACKOFF_MAX_MS` | `8000` | worker | Tope de la espera entre intentos. Entero ≥ `RECONNECT_BACKOFF_INITIAL_MS` (RF-006) |
 | **Δ** `RECONNECT_ATTEMPT_TIMEOUT_S` | `10` | worker | Límite para que un intento quede listo. Entre 1 y 120 s (RF-007) |
-| **Δ** `LIVE_SESSION_MAX_S` | vacío | worker | **Solo para pruebas.** Cierra a propósito cada conexión a los N s de quedar lista. Vacío = solo cierres reales; con valor, entero ≥ 1 (RF-023; rango pendiente de pasar a la spec, R13) |
+| **Δ** `LIVE_SESSION_MAX_S` | vacío | worker | **Solo para pruebas.** Cierra a propósito cada conexión a los N s de quedar lista. Vacío o no definido = solo cierres reales; con valor, entero ≥ 1 (RF-023, R13) |
 
 Reglas:
 

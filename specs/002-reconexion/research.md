@@ -201,9 +201,8 @@ T0R confirma los tiempos y el comportamiento observado.
   `RECONNECT_BACKOFF_MAX_MS` (hoy `from_env` toma el nombre de la variable del primer error de campo;
   la validación cruzada debe nombrarla explícitamente). `LIVE_SESSION_MAX_S` vacío equivale a no
   configurado; con valor, debe ser un entero ≥ 1.
-- **Pendiente para la spec**: RF-023 no fija el rango de `LIVE_SESSION_MAX_S`. El plan propone "entero
-  ≥ 1, si no, el worker no arranca", como en RF-006. Por el principio 9 se agrega a la spec antes de
-  implementar esa validación (tarea propuesta en el plan).
+- **Spec alineada en S0**: RF-023 fija `LIVE_SESSION_MAX_S` vacío o no definido, o entero ≥ 1; ante un
+  valor inválido, el worker no arranca e identifica la variable, como en RF-006.
 - **Descartada (validar al usar la variable)**: el worker arrancaría con una configuración inválida y
   fallaría recién en la primera reconexión, contra RF-006 y RF-029 del MVP.
 
