@@ -4,11 +4,19 @@ Instructions for AI coding agents (Claude Code, Codex) working in this repositor
 
 ## Project
 
-Open source, real-time subtitles and translation for conferences with many stages in parallel
-(Nerdearla Vibeathon 2026). Audio (file, stream URL, mic) → Gemini Live transcription →
-translation of final sentences → Redis → FastAPI gateway → audience web, OBS overlay, ops panel.
+Open source, real-time subtitles and translation for conferences with many stages in parallel.
+Audio (file, stream URL) → Gemini Live transcription → translation of final sentences → Redis →
+FastAPI gateway → audience web page and OBS/vMix overlay.
 
-**Hard deadline: 2026-09-25 15:00 UTC.** A working, simple solution beats an elegant unfinished one.
+**Status:** the MVP (feature `001-subs-mvp`, release `v1.2.0`) was built for the Nerdearla Vibeathon
+2026 and is validated. The project now evolves feature by feature, without a deadline: prefer
+correct, tested and well-documented changes over speed.
+
+**Roadmap (one Spec Kit feature each, in this order):**
+
+1. `002-reconexion` — survive Live session closes (~10 min) so talks of any length work.
+2. `003-ingesta-rtmp` — live input from OBS (microphone or any scene) through an RTMP server.
+3. `004-glosario` — per-stage glossaries with term mappings (`docs/architecture.md` §7.4).
 
 ## Read before any task
 
@@ -20,11 +28,13 @@ If these documents conflict, stop and ask. Never resolve a conflict silently.
 
 ## Workflow (Spec-Driven Development with Spec Kit)
 
-- Phases: `/speckit-constitution` → `/speckit-specify` → `/speckit-plan` → `/speckit-tasks` → `/speckit-implement`.
+- Phases: `/speckit-specify` → `/speckit-clarify` → `/speckit-plan` → `/speckit-tasks` →
+  `/speckit-analyze` → `/speckit-implement` → `/speckit-converge`.
+- One feature at a time, each on its own branch (`002-...`, `003-...`). Do not mix features.
 - **Implement one task at a time.** Do only the requested task, run the tests, show the result,
   mark the task `[x]` in `tasks.md` and **stop**. Do not start the next task unasked.
-- Priorities: P0 (MVP) → P1 → P2. Never start P1 work while any P0 task is open.
 - Behavior changes go to the spec first. Show the spec diff before touching code.
+- When a feature changes the design, update `docs/architecture.md` in the same feature.
 - Do not refactor, rename or "improve" code outside the current task.
 
 ## Git
@@ -40,10 +50,11 @@ If these documents conflict, stop and ask. Never resolve a conflict silently.
 - One Docker image, two processes: `python -m subs.worker` and `python -m subs.gateway`.
 
 ```
-src/subs/common/    config.py, schema.py (SubtitleEvent, SessionStatus)
+src/subs/common/    config.py, schema.py (SubtitleEvent, SessionStatus), queues.py, logs.py
 src/subs/worker/    main.py, ingest.py, transcriber.py, translator.py, publisher.py
-src/subs/gateway/   main.py, static/ (index.html, overlay.html, panel.html)
-samples/            audio/ (test clips), glossaries/
+src/subs/gateway/   main.py, static/ (index.html, overlay.html)
+samples/            audio/ (synthetic test clips), glossaries/, local/ (git-ignored real audio)
+scripts/            t0/ (throwaway probes), make_clips.py, replay_events.py
 tests/              pytest
 ```
 
@@ -63,9 +74,15 @@ pytest -q                         # test suite (must pass before marking a task 
   (alternative: `gemini-3.8-flash` with `LOW`). Use exact model IDs, never `-latest` aliases.
 - Audio goes only through the Live API as a continuous stream: 16-bit PCM, 16 kHz, mono,
   chunks of `AUDIO_CHUNK_MS`. **Never send audio chunks through REST calls.**
-- Translate **final** sentences only, never partials. Keep model reasoning/thinking at the minimum.
-- Live connections last about 10 minutes: code must survive a closed connection (reconnect, P1).
+- Sentence finalization uses tuned VAD (`VAD_END_SENSITIVITY`, `VAD_SILENCE_MS`) plus a forced cut
+  with `audio_stream_end` after `MAX_SEGMENT_MS`. Do not change these without a measured probe.
+- Translate **final** sentences only, never partials. Treat each final as a possible fragment.
+  Keep model reasoning/thinking at the minimum.
+- Custom vocabulary (`TRANSCRIBE_VOCABULARY`) feeds the transcription and is kept untranslated.
+- Live connections last about 10 minutes: long-running sessions must reconnect (feature 002).
 - When unsure about the SDK or API, check the official docs before guessing parameter names.
+- Decisions about audio, VAD or models are made with a throwaway probe in `scripts/t0/` and recorded
+  in the feature's `research.md`. Measure before deciding.
 
 ## Code conventions
 
@@ -80,19 +97,20 @@ pytest -q                         # test suite (must pass before marking a task 
 ## Testing
 
 - Pure functions get pytest tests written first: schema validation, config/`sessions.yaml` parsing,
-  glossary merge and filtering, SRT/VTT export.
-- Event merge by `(run_id, track, segment_id)` + `revision` lives in the audience page JS in P0 and is
-  verified with `scripts/replay_events.py`. It moves to Python with a pytest test in P1, when the
-  gateway uses it.
+  glossary merge and filtering, reconnection decisions, SRT/VTT export.
+- Event merge by `(run_id, track, segment_id)` + `revision` lives in the page JS and is verified with
+  `scripts/replay_events.py`. It moves to Python with a pytest test when the gateway needs it.
 - Gemini and ffmpeg integration is verified with the clips in `samples/audio/` using the
   "Done when" command of each task. Do not mock the Gemini API to fake a passing task.
-
+- Every feature ends with a clean-clone validation: `docker compose up` from a fresh clone, following
+  only the README.
 
 ## Boundaries
 
 **Never:** add Node or a frontend build step; send audio via REST; hardcode keys or model names;
-change `SubtitleEvent` without updating the spec; add a dependency not justified in `plan.md`;
-start a task that is not in `tasks.md`; delete or rewrite docs in `docs/` or `specs/` without being asked.
+change `SubtitleEvent` without updating the spec; add a dependency or a Docker service not justified
+in `plan.md`; start a task that is not in `tasks.md`; delete or rewrite docs in `docs/` or `specs/`
+without being asked; commit real conference audio (only `samples/local/`, which git ignores).
 
 **Ask first when:** a requirement is ambiguous, a task needs more than ~30 minutes, the docs conflict,
 or an external limit (quota, API behavior) blocks the planned approach.
