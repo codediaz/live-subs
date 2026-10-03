@@ -4,9 +4,10 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from types import SimpleNamespace
 
+from subs.common.queues import DropOldestQueue
 from subs.common.schema import SubtitleEvent
 from subs.worker.ingest import AudioClock
-from subs.worker.transcriber import SegmentTracker, _ConnectionDispatch, should_force_cut
+from subs.worker.transcriber import SegmentTracker, _AudioGapDiscarder, _ConnectionDispatch, should_force_cut
 
 
 def _content(*, partial: str | None = None, final: str | None = None) -> SimpleNamespace:
@@ -78,5 +79,45 @@ def test_cut_during_partial_delivery_rejects_final_from_same_message() -> None:
         assert tracker.open_since_ms is None
         next_event = tracker.on_interim("new phrase", now_ms=2000)
         assert (next_event.sequence, next_event.segment_id) == (2, 1)
+
+    asyncio.run(scenario())
+
+
+def test_audio_gap_discarder_skips_pending_and_new_blocks_until_connection_ready() -> None:
+    async def scenario() -> None:
+        queue: DropOldestQueue[bytes] = DropOldestQueue(2)
+        queue.put_nowait(b"pending-1")
+        queue.put_nowait(b"pending-2")
+        clock = AudioClock(chunk_ms=100, window_s=1, voice_rms_threshold=500)
+        discarder = _AudioGapDiscarder(queue=queue, clock=clock)
+        task = discarder.start()
+
+        assert discarder.gap_ms == 200
+        assert queue.empty()
+        assert clock.position_ms == 200
+        assert clock.sent_at(0) is None
+
+        async def wait_for_gap(expected_ms: int) -> None:
+            for _ in range(20):
+                if discarder.gap_ms == expected_ms:
+                    return
+                await asyncio.sleep(0)
+            assert discarder.gap_ms == expected_ms
+
+        queue.put_nowait(b"during-open")
+        await wait_for_gap(300)
+        assert queue.empty()
+        assert clock.position_ms == 300
+
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        queue.put_nowait(b"after-ready")
+        assert await queue.get() == b"after-ready"
+        assert discarder.gap_ms == 300
+        assert clock.position_ms == 300
 
     asyncio.run(scenario())
