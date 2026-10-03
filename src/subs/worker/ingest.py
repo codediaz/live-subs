@@ -62,6 +62,10 @@ class AudioClock:
         self._next_position_ms += self.chunk_ms
         return block
 
+    def skip(self) -> None:
+        """Advance past a discarded chunk without recording a send time or voice flag."""
+        self._next_position_ms += self.chunk_ms
+
     def sent_at(self, position_ms: int) -> int | None:
         """Return the actual send time for a retained audio position."""
         for block in self._blocks:
