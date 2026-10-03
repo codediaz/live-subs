@@ -6,6 +6,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 
+import websockets
 from google import genai
 from google.genai import types
 
@@ -181,11 +182,11 @@ async def transcribe(
     vad_silence_ms: int,
     max_segment_ms: int,
 ) -> None:
-    """Stream the audio queue to one Live session and hand every subtitle event to on_event.
+    """Stream the audio queue through successive Live sessions in the same run.
 
     Audio goes only through the Live API as a continuous stream (constitution, principle 2).
     Returns after the source ends and the queue is drained, waiting up to end_grace_ms for the
-    last final. Any session error propagates to the caller (the scenario supervisor).
+    last final.
     """
     config = types.LiveConnectConfig(
         response_modalities=[types.Modality.TEXT],
@@ -203,64 +204,87 @@ async def transcribe(
             )
         ),
     )
-    async with client.aio.live.connect(model=model, config=config) as session:
-        _LOGGER.info("live_session_open", extra={"session_id": session_id, "model": model})
-
-        async def send() -> None:
-            last_cut: tuple[int, int] | None = None  # (open_since_ms of the cut sentence, cut time)
-            while not (source_done.is_set() and audio_queue.empty()):
-                try:
-                    chunk = await asyncio.wait_for(audio_queue.get(), timeout=_QUEUE_POLL_S)
-                except TimeoutError:
-                    continue
-                clock.record(chunk, sent_at_ms=now_ms())
-                await session.send_realtime_input(audio=types.Blob(data=chunk, mime_type=_AUDIO_MIME_TYPE))
-                # Forced cut (RF-046): flush a sentence that stays open too long; audio keeps flowing.
-                open_since = tracker.open_since_ms
-                last_cut_ms = last_cut[1] if last_cut is not None and last_cut[0] == open_since else None
-                cut_at = now_ms()
-                if open_since is not None and should_force_cut(
-                    open_since_ms=open_since, last_cut_ms=last_cut_ms, now_ms=cut_at, max_segment_ms=max_segment_ms
-                ):
-                    await session.send_realtime_input(audio_stream_end=True)
-                    last_cut = (open_since, cut_at)
-                    _LOGGER.info("forced_cut", extra={"session_id": session_id})
-
-        async def receive() -> None:
-            while True:
-                received = False
-                async for message in session.receive():
-                    received = True
-                    content = message.server_content
-                    if content is None:
-                        continue
-                    if content.interim_input_transcription and content.interim_input_transcription.text:
-                        event = tracker.on_interim(content.interim_input_transcription.text, now_ms=now_ms())
-                        if event is not None:
-                            await on_event(event)
-                    if content.input_transcription and content.input_transcription.text:
-                        event = tracker.on_final(content.input_transcription.text, now_ms=now_ms())
-                        if event is not None:
-                            await on_event(event)
-                if not received:
-                    raise LiveSessionClosed("Live API closed the transcription session")
-
-        sender = asyncio.create_task(send())
-        receiver = asyncio.create_task(receive())
+    while True:
+        connection_ready = False
         try:
-            done, _ = await asyncio.wait({sender, receiver}, return_when=asyncio.FIRST_COMPLETED)
-            if receiver in done:
-                receiver.result()  # re-raises the session error
-                raise LiveSessionClosed("Live API closed the transcription session")
-            sender.result()
-            # Source ended: give the Live API a moment to finalize the last sentence.
-            done, _ = await asyncio.wait({receiver}, timeout=end_grace_ms / 1000)
-            if receiver in done:
-                receiver.result()
-        finally:
-            for task in (sender, receiver):
-                task.cancel()
-            for task in (sender, receiver):
-                with contextlib.suppress(asyncio.CancelledError):
-                    await task
-        _LOGGER.info("live_session_closed", extra={"session_id": session_id})
+            async with client.aio.live.connect(model=model, config=config) as session:
+                connection_ready = True
+                _LOGGER.info("live_session_open", extra={"session_id": session_id, "model": model})
+
+                async def send() -> None:
+                    last_cut: tuple[int, int] | None = None  # (open_since_ms of the cut sentence, cut time)
+                    while not (source_done.is_set() and audio_queue.empty()):
+                        try:
+                            chunk = await asyncio.wait_for(audio_queue.get(), timeout=_QUEUE_POLL_S)
+                        except TimeoutError:
+                            continue
+                        clock.record(chunk, sent_at_ms=now_ms())
+                        try:
+                            await session.send_realtime_input(audio=types.Blob(data=chunk, mime_type=_AUDIO_MIME_TYPE))
+                        except Exception as exc:
+                            raise LiveSessionClosed("Live API failed while sending audio") from exc
+                        # Forced cut (RF-046): flush a sentence that stays open too long; audio keeps flowing.
+                        open_since = tracker.open_since_ms
+                        last_cut_ms = last_cut[1] if last_cut is not None and last_cut[0] == open_since else None
+                        cut_at = now_ms()
+                        if open_since is not None and should_force_cut(
+                            open_since_ms=open_since, last_cut_ms=last_cut_ms, now_ms=cut_at, max_segment_ms=max_segment_ms
+                        ):
+                            try:
+                                await session.send_realtime_input(audio_stream_end=True)
+                            except Exception as exc:
+                                raise LiveSessionClosed("Live API failed while ending the audio stream") from exc
+                            last_cut = (open_since, cut_at)
+                            _LOGGER.info("forced_cut", extra={"session_id": session_id})
+
+                async def receive() -> None:
+                    while True:
+                        received = False
+                        messages = aiter(session.receive())
+                        while True:
+                            try:
+                                message = await anext(messages)
+                            except StopAsyncIteration:
+                                break
+                            except Exception as exc:
+                                raise LiveSessionClosed("Live API failed while receiving audio") from exc
+                            received = True
+                            content = message.server_content
+                            if content is None:
+                                continue
+                            if content.interim_input_transcription and content.interim_input_transcription.text:
+                                event = tracker.on_interim(content.interim_input_transcription.text, now_ms=now_ms())
+                                if event is not None:
+                                    await on_event(event)
+                            if content.input_transcription and content.input_transcription.text:
+                                event = tracker.on_final(content.input_transcription.text, now_ms=now_ms())
+                                if event is not None:
+                                    await on_event(event)
+                        if not received:
+                            raise LiveSessionClosed("Live API closed the transcription session")
+
+                sender = asyncio.create_task(send())
+                receiver = asyncio.create_task(receive())
+                try:
+                    done, _ = await asyncio.wait({sender, receiver}, return_when=asyncio.FIRST_COMPLETED)
+                    if receiver in done:
+                        receiver.result()  # re-raises the session error
+                        raise LiveSessionClosed("Live API closed the transcription session")
+                    sender.result()
+                    # Source ended: give the Live API a moment to finalize the last sentence.
+                    done, _ = await asyncio.wait({receiver}, timeout=end_grace_ms / 1000)
+                    if receiver in done:
+                        receiver.result()
+                finally:
+                    for task in (sender, receiver):
+                        task.cancel()
+                    for task in (sender, receiver):
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await task
+            _LOGGER.info("live_session_closed", extra={"session_id": session_id})
+            return
+        except (LiveSessionClosed, genai.errors.APIError, websockets.ConnectionClosed):
+            if not connection_ready:
+                raise  # Opening retries belong to T024; the first opening retains MVP behavior.
+            if source_done.is_set() and audio_queue.empty():
+                return
